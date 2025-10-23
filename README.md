@@ -6,7 +6,7 @@ Background: https://github.com/LostMa-ERC/heurist-api
 
 ## Before to start
 
-Install the [Heurist-api(https://github.com/LostMa-ERC/heurist-api) with pip.
+Install the [Heurist-api](https://github.com/LostMa-ERC/heurist-api) with pip.
 
 ```shell
 pip install heurist-api
