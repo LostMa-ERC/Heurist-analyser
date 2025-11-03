@@ -119,7 +119,7 @@ def count_required_data() -> dict:
 
 def collect_presence_data(
     column_names: list[dict | str] = None
-) -> dict:
+) -> tuple[dict, str]:
     # summary presence of data in the Duck DB
     # note: il existe apparemment un moyen de scoper les tables en fonction d'un critère
     # puis de rendre récurcif ce scope sur les autres tables à partir desquelles elle est liée
