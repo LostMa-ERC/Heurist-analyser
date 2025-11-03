@@ -125,7 +125,7 @@ def collect_presence_data(
     # puis de rendre récurcif ce scope sur les autres tables à partir desquelles elle est liée
     # ça ferait une étape supplémentaire préalable à l'utilisation de cette fonction sur
     # une view sql déjà préparée, mais on peut essayer de l'envisager
-    collect = {}
+    collect, log_data = {}, []
     required_data = def_requirements(schema_path)
     with duckdb.connect(duck_db_path) as con:
         # if no input data, search for everything
@@ -154,14 +154,18 @@ def collect_presence_data(
                 collect[name_table] = {}
                 details = [d for l in table.values() for d in l if d not in ["H-ID", "type_id"] and "TRM-ID" not in d]
                 for detail in details:
-                    req_type = required_data[name_table][detail]
-                    query = f"SELECT count (*) FROM {name_table} WHERE \"{detail}\" IS NULL"
-                    count_empty = con.sql(query).fetchone()[0]
-                    collect[name_table][detail] = {'required statement' : req_type,
-                                                   'empty records': count_empty,
-                                                   'total records': len_table,
-                                                   'percentage problem': round((count_empty / len_table) * 100, 2)}
-    return collect
+                    if detail in required_data[name_table]:
+                        req_type = required_data[name_table][detail]
+                        query = f"SELECT count (*) FROM {name_table} WHERE \"{detail}\" IS NULL"
+                        count_empty = con.sql(query).fetchone()[0]
+                        collect[name_table][detail] = {'required statement' : req_type,
+                                                       'empty records': count_empty,
+                                                       'total records': len_table,
+                                                       'percentage problem': round((count_empty / len_table) * 100, 2)}
+                    else:
+                        log_data.append(f"{name_table}.{detail}")
+            log_return = f"fields {", ".join(log_data)} are hidden"
+    return collect, log_return
 
 # print(collect_presence_data(["witness"]))
 
