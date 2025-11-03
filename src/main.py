@@ -121,6 +121,10 @@ def collect_presence_data(
     column_names: list[dict | str] = None
 ) -> dict:
     # summary presence of data in the Duck DB
+    # note: il existe apparemment un moyen de scoper les tables en fonction d'un critère
+    # puis de rendre récurcif ce scope sur les autres tables à partir desquelles elle est liée
+    # ça ferait une étape supplémentaire préalable à l'utilisation de cette fonction sur
+    # une view sql déjà préparée, mais on peut essayer de l'envisager
     collect = {}
     required_data = def_requirements(schema_path)
     with duckdb.connect(duck_db_path) as con:
