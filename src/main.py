@@ -161,7 +161,7 @@ def collect_presence_data(
                         collect[name_table][detail] = {'required statement' : req_type,
                                                        'empty records': count_empty,
                                                        'total records': len_table,
-                                                       'percentage problem': round((count_empty / len_table) * 100, 2)}
+                                                       'percentage empty': round((count_empty / len_table) * 100, 2)}
                     else:
                         log_data.append(f"{name_table}.{detail}")
             log_return = f"fields {", ".join(log_data)} are hidden"
