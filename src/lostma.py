@@ -19,9 +19,6 @@ aussi sélectionner des sous-corpus en fonction de la valeur d'un attribut pour 
 PS : Attention au fait que l'Heurist-API ne télécharge par défaut que les données de la catégorie 'My record types'
 """
 
-
-
-
 def collect_presence_specific_data(
     column_names: list[dict | str] = None,
     lang: str = None
@@ -51,14 +48,15 @@ def collect_presence_specific_data(
         for table in column_names:
             if isinstance(table, dict):
                 name_table = [t for t in table.keys()][0]
-                len_table = con.sql(f"SELECT count(DISTINCT {name_table}.\"H-ID\") FROM {name_table}").fetchone()[0]
+                len_table = con.sql(f"SELECT count(DISTINCT {name_table}.\"H-ID\") FROM {name_table} "
+                                    f"WHERE {name_table}.language_COLUMN = '{lang}'").fetchone()[0]
                 collect[name_table] = {}
                 details = [d for l in table.values() for d in l if d not in ["H-ID", "type_id"] and "TRM-ID" not in d]
                 for detail in details:
                     if detail in required_data[name_table]:
                         req_type = required_data[name_table][detail]
                         query = (f"SELECT count(DISTINCT {name_table}.\"H-ID\") FROM {name_table} "
-                                 f"WHERE {name_table}.\"{detail}\" IS NULL")
+                                 f"WHERE {name_table}.\"{detail}\" IS NULL AND {name_table}.language_COLUMN = '{lang}'")
                         count_empty = con.sql(query).fetchone()[0]
                         collect[name_table][detail] = {'required statement' : req_type,
                                                        'empty records': count_empty,
@@ -173,9 +171,16 @@ Requêtes pour les stemma :
                                  f"WHERE {name_table}.\"{detail}\" IS NULL AND TextTable.language_COLUMN = '{lang}'")
 3 - Pas de review_status pour ce champ
 
+Requêtes pour les scripta :
+1 - len_table = con.sql(f"SELECT count(DISTINCT {name_table}.\"H-ID\") FROM {name_table} "
+                                    f"WHERE {name_table}.language_COLUMN = '{lang}'").fetchone()[0]
+2 - query = (f"SELECT count(DISTINCT {name_table}.\"H-ID\") FROM {name_table} "
+                                 f"WHERE {name_table}.\"{detail}\" IS NULL AND {name_table}.language_COLUMN = '{lang}'")
+3 - action_required = con.sql(f"SELECT count(DISTINCT {table}.\"H-ID\") FROM {table} "
+                                  f"WHERE {table}.review_status = 'Action required' AND {table}.language_COLUMN = '{language}'")
+
 Requêtes pour les autres tables:
-1 - name_columns = con.sql(f"SELECT column_name FROM information_schema.columns "
-                           f"WHERE table_name = '{table}';")
+1 - len_table = con.sql(f"SELECT count(DISTINCT {name_table}.\"H-ID\") FROM {name_table}").fetchone()[0]
 2 - query = (f"SELECT count(DISTINCT {name_table}.\"H-ID\") FROM {name_table} "
              f"WHERE {name_table}.\"{detail}\" IS NULL")
 3 - action_required = con.sql(f"SELECT count(DISTINCT {table}.\"H-ID\") FROM {table} "
@@ -186,14 +191,16 @@ languages = ["dum (Middle Dutch)", "enm (Middle English)", "non (Old Norse)", "f
              "fro (Old French)", "fro_ITA (Franco-Italian)", "fro_ENG (Anglo-Norman)", "lat (Latin)", "gmh (Middle High German)", "ita (Italian)"]
 
 # J'ai supprimé la boucle linguistique pour les dernières tables
-table = "JournalArticle"
-result = collect_presence_specific_data([table])[0]
-for r in result.keys():
-    df = pd.DataFrame.from_dict(result[r], orient="index")
-    df.to_csv(f"result.csv")
-    # Cette donnée n'est présente que pour certaines tables
-    '''
-    con = duckdb.connect(duck_db_path)
-    action_required = con.sql(f"SELECT count(DISTINCT {table}.\"H-ID\") FROM {table} "
-                              f"WHERE {table}.review_status = 'Action required'")
-    print(action_required)'''
+table = "scripta"
+
+for language in languages:
+    result = collect_presence_specific_data([table], lang=language)[0]
+    print(language)
+    for r in result.keys():
+        df = pd.DataFrame.from_dict(result[r], orient="index")
+        df.to_csv(f"result-{language}.csv")
+        # Cette donnée n'est présente que pour certaines tables
+        con = duckdb.connect(duck_db_path)
+        action_required = con.sql(f"SELECT count(DISTINCT {table}.\"H-ID\") FROM {table} "
+                                  f"WHERE {table}.review_status = 'Action required' AND {table}.language_COLUMN = '{language}'")
+        print(action_required)
