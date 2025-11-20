@@ -1,6 +1,6 @@
 import duckdb
 import pandas as pd
-from main import def_requirements, BASE_TABLES, schema_path, duck_db_path
+from general import def_requirements, BASE_TABLES, schema_path, duck_db_path
 
 """
 Ce fichier sert  juste à utiliser python pour faire des requêtes sur les corpus chargés dans la Duck DB
