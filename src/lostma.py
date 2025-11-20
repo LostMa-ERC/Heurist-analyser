@@ -19,6 +19,10 @@ aussi sélectionner des sous-corpus en fonction de la valeur d'un attribut pour 
 PS : Attention au fait que l'Heurist-API ne télécharge par défaut que les données de la catégorie 'My record types'
 """
 
+with duckdb.connect(duck_db_path) as con:
+    query = con.sql(f"SELECT * FROM TextTable WHERE language_COLUMN = 'fro (Old French)';")
+    query.fetchdf().to_csv("result.csv")
+
 def collect_presence_specific_data(
     column_names: list[dict | str] = None,
     lang: str = None
@@ -48,15 +52,27 @@ def collect_presence_specific_data(
         for table in column_names:
             if isinstance(table, dict):
                 name_table = [t for t in table.keys()][0]
-                len_table = con.sql(f"SELECT count(DISTINCT {name_table}.\"H-ID\") FROM {name_table} "
-                                    f"WHERE {name_table}.language_COLUMN = '{lang}'").fetchone()[0]
+                len_table = con.sql(f"SELECT COUNT(*) FROM {name_table} WHERE language_COLUMN = '{lang}';").fetchone()[0]
                 collect[name_table] = {}
                 details = [d for l in table.values() for d in l if d not in ["H-ID", "type_id"] and "TRM-ID" not in d]
                 for detail in details:
                     if detail in required_data[name_table]:
                         req_type = required_data[name_table][detail]
-                        query = (f"SELECT count(DISTINCT {name_table}.\"H-ID\") FROM {name_table} "
-                                 f"WHERE {name_table}.\"{detail}\" IS NULL AND {name_table}.language_COLUMN = '{lang}'")
+                        dtype = con.execute("""
+                                SELECT data_type
+                                FROM information_schema.columns
+                                WHERE table_name = ?
+                                  AND column_name = ?
+                            """, [name_table, detail]).fetchone()[0]
+                        if dtype.endswith('[]'):
+                            # Cas liste
+                            query = (f"SELECT count (*) FROM {name_table} WHERE (\"{detail}\" IS NULL "
+                                     f"OR array_length(\"{detail}\") = 0) "
+                                     f"AND language_COLUMN = '{lang}'")
+                        else:
+                            # Cas scalaire
+                            query = (f"SELECT count (*) FROM {name_table} WHERE \"{detail}\" IS NULL "
+                                     f"AND language_COLUMN = '{lang}'")
                         count_empty = con.sql(query).fetchone()[0]
                         collect[name_table][detail] = {'required statement' : req_type,
                                                        'empty records': count_empty,
@@ -191,7 +207,7 @@ languages = ["dum (Middle Dutch)", "enm (Middle English)", "non (Old Norse)", "f
              "fro (Old French)", "fro_ITA (Franco-Italian)", "fro_ENG (Anglo-Norman)", "lat (Latin)", "gmh (Middle High German)", "ita (Italian)"]
 
 # J'ai supprimé la boucle linguistique pour les dernières tables
-table = "scripta"
+table = "TextTable"
 
 for language in languages:
     result = collect_presence_specific_data([table], lang=language)[0]
@@ -201,6 +217,5 @@ for language in languages:
         df.to_csv(f"result-{language}.csv")
         # Cette donnée n'est présente que pour certaines tables
         con = duckdb.connect(duck_db_path)
-        action_required = con.sql(f"SELECT count(DISTINCT {table}.\"H-ID\") FROM {table} "
-                                  f"WHERE {table}.review_status = 'Action required' AND {table}.language_COLUMN = '{language}'")
+        action_required = con.sql(f"SELECT count(*) FROM {table} WHERE review_status = 'Action required' AND language_COLUMN = '{language}'")
         print(action_required)
