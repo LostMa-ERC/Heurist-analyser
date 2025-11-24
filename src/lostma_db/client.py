@@ -76,7 +76,7 @@ class LostmaDB:
             Filter on the language_COLUMN text attribute (ex: 'dum (Middle Dutch)')
         """
 
-        query = "SELECT witness.* FROM witness LEFT JOIN text ON witness.\"is_manifestation of H-ID\" = text.\"H-ID\""
+        query = "SELECT witness.* FROM witness LEFT JOIN TextTable ON witness.\"is_manifestation of H-ID\" = text.\"H-ID\""
         if languages:
             if isinstance(languages, str):
                 languages = [languages]
