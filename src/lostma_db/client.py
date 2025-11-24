@@ -54,8 +54,3 @@ class LostmaDB:
         res = con.execute(query).fetchdf()
         con.close()
         return res
-
-
-db = LostmaDB("virgile.reignier", "Chartes2025")
-db.sync()
-print(db.sql("SELECT * FROM witness"))
