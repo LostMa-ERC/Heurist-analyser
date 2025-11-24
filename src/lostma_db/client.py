@@ -48,9 +48,37 @@ class LostmaDB:
 
     def sql(self, query: str):
         """
-        Exécute une requête et renvoie un DataFrame (idéal en notebook).
+        Execute a request and return a dataframe
         """
         con = duckdb.connect(self.duckdb_path)
         res = con.execute(query).fetchdf()
         con.close()
         return res
+
+    def texts(self, languages: list = None):
+        """
+        Return the content of the text table
+
+        :param languages: list, optional
+            Filter on the language_COLUMN attribute (ex: 'dum (Middle Dutch)')
+        """
+
+        query = "SELECT * FROM TextTable "
+        if languages:
+            query += f"WHERE language_COLUMN IN ('{"', '".join(languages)}')"
+        return self.sql(query)
+
+    def witnesses(self, languages: list = None):
+        """
+        Return the content of the witness table
+
+        :param languages: list, optional
+            Filter on the language_COLUMN text attribute (ex: 'dum (Middle Dutch)')
+        """
+
+        query = "SELECT witness.* FROM witness LEFT JOIN text ON witness.\"is_manifestation of H-ID\" = text.\"H-ID\""
+        if languages:
+            if isinstance(languages, str):
+                languages = [languages]
+            query += f"WHERE language_COLUMN IN ('{"', '".join(languages)}')"
+        return self.sql(query)
