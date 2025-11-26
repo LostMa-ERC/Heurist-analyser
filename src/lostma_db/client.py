@@ -93,10 +93,11 @@ class LostmaDB:
     def analyse(self, name_table: str = None,
                 language: str = None):
         """
+        A function to analyse the completeness of each table for each corpus
 
         :param language: str
         :param name_table: str
-        :return: tuple
+        :return: dict
         """
         if name_table[0].isupper():
             name_table = name_table[0].lower() + name_table[1:]
