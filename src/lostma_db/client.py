@@ -6,15 +6,14 @@ from .general import def_requirements
 from .lostma_tables import LOSTMA_TABLES
 
 class LostmaDB:
-    def __init__(self, login, password, duckdb_path: str | Path | None = None,
-                 schema_dir: str | Path | None = None):
+    def __init__(self, login, password, duckdb_path: str | Path | None = None):
         self.database = "jbcamps_gestes"
         self.login = login
         self.password = password
         self.cli_path = "heurist"
         base = Path.cwd()
-        self.duckdb_path = Path(duckdb_path) if duckdb_path else base / "data" / "lostma.duckdb"
-        self.schema_dir = Path(schema_dir) if schema_dir else base / "data" / "schema"
+        self.duckdb_path = Path(duckdb_path) if duckdb_path else base / "lostma.duckdb"
+        self.schema_dir = Path(self.database + "_schema")
 
     def download_database(self) -> None:
         """
