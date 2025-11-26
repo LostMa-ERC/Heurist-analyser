@@ -12,7 +12,7 @@ class LostmaDB:
         self.password = password
         self.cli_path = "heurist"
         base = Path.cwd()
-        self.duckdb_path = Path(duckdb_path) if duckdb_path else base / "lostma.duckdb"
+        self.duckdb_path = Path(duckdb_path) if duckdb_path else base / "lostma.db"
         self.schema_dir = Path(self.database + "_schema")
 
     def download_database(self) -> None:
