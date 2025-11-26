@@ -19,7 +19,7 @@ BASE_TABLES = [
 schema_path = current_path.joinpath("jbcamps_gestes_schema")
 
 duck_db_path = current_path.joinpath("lostma.db")
-from background import yield_log_blocks
+from .background import yield_log_blocks
 
 def def_requirements(
         path: Path | str,
