@@ -1,17 +1,20 @@
 import subprocess
 import duckdb
 import pandas as pd
-from .general import def_requirements, current_path
+from pathlib import Path
+from .general import def_requirements
 from .lostma_tables import LOSTMA_TABLES
 
 class LostmaDB:
-    def __init__(self, login, password):
+    def __init__(self, login, password, duckdb_path: str | Path | None = None,
+                 schema_dir: str | Path | None = None):
         self.database = "jbcamps_gestes"
-        self.duckdb_path = "lostma.db"
         self.login = login
         self.password = password
         self.cli_path = "heurist"
-        self.schema_path = current_path.joinpath(self.database + "_schema")
+        base = Path.cwd()
+        self.duckdb_path = Path(duckdb_path) if duckdb_path else base / "data" / "lostma.duckdb"
+        self.schema_dir = Path(schema_dir) if schema_dir else base / "data" / "schema"
 
     def download_database(self) -> None:
         """
@@ -101,7 +104,7 @@ class LostmaDB:
         sql_name = LOSTMA_TABLES[name_table]["safe_sql_name"]
         columns = self.sql("SELECT column_name FROM information_schema.columns "
                            "WHERE table_name = ?;", [sql_name])["column_name"].tolist()
-        required_data = def_requirements(self.schema_path)
+        required_data = def_requirements(self.schema_dir)
         action_required = "No field for this table"
         if LOSTMA_TABLES[name_table]["is_corpus_data"]:
             len_table = self.sql(LOSTMA_TABLES[name_table]["len_query"], [language]).iloc[0, 0]
