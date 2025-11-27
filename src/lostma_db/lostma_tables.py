@@ -3,12 +3,10 @@ LOSTMA_TABLES = {
         "safe_sql_name": "TextTable",
         "is_corpus_data": True,
         "len_query": "SELECT COUNT(*) FROM TextTable WHERE language_COLUMN = ?;",
-        "scalar_query": "SELECT count (*) FROM TextTable WHERE TextTable.\"{detail}\" IS NULL AND language_COLUMN = ?;",
-        "list_query": "SELECT count (*) FROM TextTable "
-                      "WHERE (TextTable.\"{detail}\" IS NULL OR array_length(TextTable.\"{detail}\") = 0) "
-                      "AND language_COLUMN = ?",
+        "detail_query": "FROM TextTable WHERE language_COLUMN = ?;",
         "action_required": "SELECT count(*) FROM TextTable "
-                           "WHERE review_status = 'Action required' AND language_COLUMN = ?;"
+                           "WHERE review_status = 'Action required' AND language_COLUMN = ?;",
+        "type": "My record types"
     },
     "witness": {
             "safe_sql_name": "Witness",
@@ -16,16 +14,13 @@ LOSTMA_TABLES = {
             "len_query": "SELECT COUNT(*) FROM witness "
                          "INNER JOIN TextTable ON TextTable.\"H-ID\" = witness.\"is_manifestation_of H-ID\" "
                          "WHERE TextTable.language_COLUMN = ?;",
-            "scalar_query": "SELECT count (*) FROM witness "
+            "detail_query": "FROM witness "
                             "INNER JOIN TextTable ON TextTable.\"H-ID\" = witness.\"is_manifestation_of H-ID\" "
-                            "WHERE witness.\"{detail}\" IS NULL AND TextTable.language_COLUMN = ?;",
-            "list_query": "SELECT count (*) FROM witness "
-                          "INNER JOIN TextTable ON TextTable.\"H-ID\" = witness.\"is_manifestation_of H-ID\" "
-                          "WHERE (witness.\"{detail}\" IS NULL "
-                          "OR array_length(witness.\"{detail}\") = 0) AND TextTable.language_COLUMN = ?;",
+                            "WHERE TextTable.language_COLUMN = ?;",
             "action_required": "SELECT count(*) FROM witness "
                                "INNER JOIN TextTable ON TextTable.\"H-ID\" = witness.\"is_manifestation_of H-ID\" "
-                               "WHERE witness.review_status = 'Action required' AND TextTable.language_COLUMN = ?;"
+                               "WHERE witness.review_status = 'Action required' AND TextTable.language_COLUMN = ?;",
+            "type": "My record types"
         },
     "part": {
             "safe_sql_name": "Part",
@@ -35,22 +30,17 @@ LOSTMA_TABLES = {
                          "INNER JOIN UNNEST(witness.\"observed_on_pages H-ID\") AS w ON w.unnest = part.\"H-ID\" "
                          "INNER JOIN TextTable ON TextTable.\"H-ID\" = witness.\"is_manifestation_of H-ID\" "
                          "WHERE TextTable.language_COLUMN = ?;",
-            "scalar_query": "SELECT count (DISTINCT part.\"H-ID\") FROM part "
+            "detail_query": "FROM part "
                             "INNER JOIN witness ON True "
                             "INNER JOIN UNNEST(witness.\"observed_on_pages H-ID\") AS w ON w.unnest = part.\"H-ID\" "
                             "INNER JOIN TextTable ON TextTable.\"H-ID\" = witness.\"is_manifestation_of H-ID\" "
-                            "WHERE part.\"{detail}\" IS NULL AND TextTable.language_COLUMN = ?;",
-            "list_query": "SELECT count (DISTINCT part.\"H-ID\") FROM part "
-                          "INNER JOIN witness ON True "
-                          "INNER JOIN UNNEST(witness.\"observed_on_pages H-ID\") AS w ON w.unnest = part.\"H-ID\" "
-                          "INNER JOIN TextTable ON TextTable.\"H-ID\" = witness.\"is_manifestation_of H-ID\" "
-                          "WHERE (part.\"{detail}\" IS NULL OR array_length(part.\"{detail}\") = 0) "
-                          "AND TextTable.language_COLUMN = ?;",
+                            "WHERE TextTable.language_COLUMN = ?;",
             "action_required": "SELECT count(DISTINCT part.\"H-ID\") FROM part "
                                "INNER JOIN witness ON True "
                                "INNER JOIN UNNEST(witness.\"observed_on_pages H-ID\") AS w ON w.unnest = part.\"H-ID\" "
                                "INNER JOIN TextTable ON TextTable.\"H-ID\" = witness.\"is_manifestation_of H-ID\" "
-                               "WHERE part.review_status = 'Action required' AND TextTable.language_COLUMN = ?;"
+                               "WHERE part.review_status = 'Action required' AND TextTable.language_COLUMN = ?;",
+            "type": "My record types"
         },
     "document": {
             "safe_sql_name": "DocumentTable",
@@ -61,26 +51,20 @@ LOSTMA_TABLES = {
                          "INNER JOIN UNNEST(witness.\"observed_on_pages H-ID\") AS w ON w.unnest = part.\"H-ID\" "
                          "INNER JOIN TextTable ON TextTable.\"H-ID\" = witness.\"is_manifestation_of H-ID\" "
                          "WHERE TextTable.language_COLUMN = ?;",
-            "scalar_query": "SELECT count (DISTINCT DocumentTable.\"H-ID\") FROM DocumentTable "
+            "detail_query": "FROM DocumentTable "
                             "INNER JOIN part ON part.\"is_inscribed_on H-ID\" = DocumentTable.\"H-ID\" "
                             "INNER JOIN witness ON True "
                             "INNER JOIN UNNEST(witness.\"observed_on_pages H-ID\") AS w ON w.unnest = part.\"H-ID\" "
                             "INNER JOIN TextTable ON TextTable.\"H-ID\" = witness.\"is_manifestation_of H-ID\" "
-                            "WHERE DocumentTable.\"{detail}\" IS NULL AND TextTable.language_COLUMN = ?;",
-            "list_query": "SELECT count (DISTINCT DocumentTable.\"H-ID\") FROM DocumentTable "
-                          "INNER JOIN part ON part.\"is_inscribed_on H-ID\" = DocumentTable.\"H-ID\" "
-                          "INNER JOIN witness ON True "
-                          "INNER JOIN UNNEST(witness.\"observed_on_pages H-ID\") AS w ON w.unnest = part.\"H-ID\" "
-                          "INNER JOIN TextTable ON TextTable.\"H-ID\" = witness.\"is_manifestation_of H-ID\" "
-                          "WHERE (DocumentTable.\"{detail}\" IS NULL OR array_length(DocumentTable.\"{detail}\") = 0) "
-                          "AND TextTable.language_COLUMN = ?;",
+                            "WHERE TextTable.language_COLUMN = ?;",
             "action_required": "SELECT count(DISTINCT DocumentTable.\"H-ID\") FROM DocumentTable "
                                "INNER JOIN part ON part.\"is_inscribed_on H-ID\" = DocumentTable.\"H-ID\" "
                                "INNER JOIN witness ON True "
                                "INNER JOIN UNNEST(witness.\"observed_on_pages H-ID\") AS w ON w.unnest = part.\"H-ID\" "
                                "INNER JOIN TextTable ON TextTable.\"H-ID\" = witness.\"is_manifestation_of H-ID\" "
                                "WHERE DocumentTable.review_status = 'Action required' "
-                               "AND TextTable.language_COLUMN = ?;"
+                               "AND TextTable.language_COLUMN = ?;",
+            "type": "My record types"
         },
     "digitization": {
             "safe_sql_name": "Digitization",
@@ -94,7 +78,7 @@ LOSTMA_TABLES = {
                          "INNER JOIN UNNEST(witness.\"observed_on_pages H-ID\") AS w ON w.unnest = part.\"H-ID\" "
                          "INNER JOIN TextTable ON TextTable.\"H-ID\" = witness.\"is_manifestation_of H-ID\" "
                          "WHERE TextTable.language_COLUMN = ?;",
-            "scalar_query": "SELECT count (DISTINCT digitization.\"H-ID\") FROM digitization "
+            "detail_query": "FROM digitization "
                             "INNER JOIN DocumentTable ON True "
                             "INNER JOIN UNNEST(digitization.\"digitization_of H-ID\") "
                             "AS d ON d.unnest = DocumentTable.\"H-ID\" "
@@ -102,18 +86,9 @@ LOSTMA_TABLES = {
                             "INNER JOIN witness ON True "
                             "INNER JOIN UNNEST(witness.\"observed_on_pages H-ID\") AS w ON w.unnest = part.\"H-ID\" "
                             "INNER JOIN TextTable ON TextTable.\"H-ID\" = witness.\"is_manifestation_of H-ID\" "
-                            "WHERE digitization.\"{detail}\" IS NULL AND TextTable.language_COLUMN = ?;",
-            "list_query": "SELECT count (DISTINCT digitization.\"H-ID\") FROM digitization "
-                           "INNER JOIN DocumentTable ON True "
-                           "INNER JOIN UNNEST(digitization.\"digitization_of H-ID\") "
-                           "AS d ON d.unnest = DocumentTable.\"H-ID\" "
-                           "INNER JOIN part ON part.\"is_inscribed_on H-ID\" = DocumentTable.\"H-ID\" "
-                           "INNER JOIN witness ON True "
-                           "INNER JOIN UNNEST(witness.\"observed_on_pages H-ID\") AS w ON w.unnest = part.\"H-ID\" "
-                           "INNER JOIN TextTable ON TextTable.\"H-ID\" = witness.\"is_manifestation_of H-ID\" "
-                           "WHERE (digitization.\"{detail}\" IS NULL OR array_length(digitization.\"{detail}\") = 0) "
-                          "AND TextTable.language_COLUMN = ?;",
-            "action_required": None
+                            "WHERE TextTable.language_COLUMN = ?;",
+            "action_required": None,
+            "type": "My record types"
         },
     "physDesc": {
             "safe_sql_name": "PhysDesc",
@@ -124,25 +99,19 @@ LOSTMA_TABLES = {
                          "INNER JOIN UNNEST(witness.\"observed_on_pages H-ID\") AS w ON w.unnest = part.\"H-ID\" "
                          "INNER JOIN TextTable ON TextTable.\"H-ID\" = witness.\"is_manifestation_of H-ID\" "
                          "WHERE TextTable.language_COLUMN = ?;",
-            "scalar_query": "SELECT count (DISTINCT PhysDesc.\"H-ID\") FROM PhysDesc "
+            "detail_query": "FROM PhysDesc "
                             "INNER JOIN part ON part.\"physical_description H-ID\" = PhysDesc.\"H-ID\" "
                             "INNER JOIN witness ON True "
                             "INNER JOIN UNNEST(witness.\"observed_on_pages H-ID\") AS w ON w.unnest = part.\"H-ID\" "
                             "INNER JOIN TextTable ON TextTable.\"H-ID\" = witness.\"is_manifestation_of H-ID\" "
-                            "WHERE physDesc.\"{detail}\" IS NULL AND TextTable.language_COLUMN = ?;",
-            "list_query": "SELECT count (DISTINCT PhysDesc.\"H-ID\") FROM PhysDesc "
-                          "INNER JOIN part ON part.\"physical_description H-ID\" = PhysDesc.\"H-ID\" "
-                          "INNER JOIN witness ON True "
-                          "INNER JOIN UNNEST(witness.\"observed_on_pages H-ID\") AS w ON w.unnest = part.\"H-ID\" "
-                          "INNER JOIN TextTable ON TextTable.\"H-ID\" = witness.\"is_manifestation_of H-ID\" "
-                          "WHERE (physDesc.\"{detail}\" IS NULL OR array_length(physDesc.\"{detail}\") = 0) "
-                          "AND TextTable.language_COLUMN = ?;",
+                            "WHERE TextTable.language_COLUMN = ?;",
             "action_required": "SELECT count(DISTINCT PhysDesc.\"H-ID\") FROM PhysDesc "
                                "INNER JOIN part ON part.\"physical_description H-ID\" = PhysDesc.\"H-ID\" "
                                "INNER JOIN witness ON True "
                                "INNER JOIN UNNEST(witness.\"observed_on_pages H-ID\") AS w ON w.unnest = part.\"H-ID\" "
                                "INNER JOIN TextTable ON TextTable.\"H-ID\" = witness.\"is_manifestation_of H-ID\" "
-                               "WHERE PhysDesc.review_status = 'Action required' AND TextTable.language_COLUMN = ?;"
+                               "WHERE PhysDesc.review_status = 'Action required' AND TextTable.language_COLUMN = ?;",
+            "type": "My record types"
         },
     "stemma": {
             "safe_sql_name": "Stemma",
@@ -151,111 +120,116 @@ LOSTMA_TABLES = {
                          "INNER JOIN TextTable ON True "
                          "INNER JOIN UNNEST(TextTable.\"in_stemma H-ID\") AS s ON s.unnest = stemma.\"H-ID\" "
                          "WHERE TextTable.language_COLUMN = ?;",
-            "scalar_query": "SELECT count(DISTINCT stemma.\"H-ID\") FROM stemma "
+            "detail_query": "FROM stemma "
                             "INNER JOIN TextTable ON True "
                             "INNER JOIN UNNEST(TextTable.\"in_stemma H-ID\") AS s ON s.unnest = stemma.\"H-ID\" "
-                            "WHERE stemma.\"{detail}\" IS NULL AND TextTable.language_COLUMN = ?;",
-            "list_query": "SELECT count(DISTINCT stemma.\"H-ID\") FROM stemma "
-                          "INNER JOIN TextTable ON True "
-                          "INNER JOIN UNNEST(TextTable.\"in_stemma H-ID\") AS s ON s.unnest = stemma.\"H-ID\" "
-                          "WHERE (stemma.\"{detail}\" IS NULL OR array_length(stemma.\"{detail}\") = 0) "
-                          "AND TextTable.language_COLUMN = ?;",
-            "action_required": None
+                            "WHERE TextTable.language_COLUMN = ?;",
+            "action_required": None,
+            "type": "My record types"
         },
     "scripta": {
             "safe_sql_name": "Scripta",
             "is_corpus_data": True,
             "len_query": "SELECT count(DISTINCT scripta.\"H-ID\") FROM scripta "
                          "WHERE scripta.language_COLUMN = ?;",
-            "scalar_query": "SELECT count(DISTINCT scripta.\"H-ID\") FROM scripta "
-                            "WHERE scripta.\"{detail}\" IS NULL AND scripta.language_COLUMN = ?;",
-            "list_query": "SELECT count(DISTINCT scripta.\"H-ID\") FROM scripta "
-                          "WHERE (scripta.\"{detail}\" IS NULL OR array_length(scripta.\"{detail}\") = 0) "
-                          "AND scripta.language_COLUMN = ?;",
+            "detail_query": "FROM scripta "
+                            "WHERE TextTable.language_COLUMN = ?;",
             "action_required": "SELECT count(DISTINCT scripta.\"H-ID\") FROM scripta "
-                               "WHERE scripta.review_status = 'Action required' AND scripta.language_COLUMN = ?;"
+                               "WHERE scripta.review_status = 'Action required' AND scripta.language_COLUMN = ?;",
+            "type": "My record types"
     },
     "images": {
         "safe_sql_name": "Images",
         "is_corpus_data": False,
-        "is_action_required": False
+        "is_action_required": False,
+        "type": "My record types"
     },
     "story": {
         "safe_sql_name": "Story",
         "is_corpus_data": False,
-        "is_action_required": True
+        "is_action_required": True,
+        "type": "My record types"
     },
     "storyverse": {
         "safe_sql_name": "Storyverse",
         "is_corpus_data": False,
-        "is_action_required": True
+        "is_action_required": True,
+        "type": "My record types"
     },
     "genre": {
         "safe_sql_name": "Genre",
         "is_corpus_data": False,
-        "is_action_required": True
+        "is_action_required": True,
+        "type": "My record types"
     },
     "repository": {
         "safe_sql_name": "Repository",
         "is_corpus_data": False,
-        "is_action_required": False
+        "is_action_required": False,
+        "type": "My record types"
     },
     "footnote": {
         "safe_sql_name": "Footnote",
         "is_corpus_data": False,
-        "is_action_required": False
+        "is_action_required": False,
+        "type": "My record types"
     },
     "person": {
         "safe_sql_name": "Person",
         "is_corpus_data": False,
-        "is_action_required": False
+        "is_action_required": False,
+        "type": "People and organisations"
     },
     "organisation": {
         "safe_sql_name": "Organisation",
         "is_corpus_data": False,
-        "is_action_required": False
+        "is_action_required": False,
+        "type": "People and organisations"
     },
     "place": {
         "safe_sql_name": "Place",
         "is_corpus_data": False,
-        "is_action_required": False
+        "is_action_required": False,
+        "type": "Place, features"
     },
     "book": {
         "safe_sql_name": "Book",
         "is_corpus_data": False,
-        "is_action_required": False
+        "is_action_required": False,
+        "type": "Bibliography"
     },
     "thesis": {
         "safe_sql_name": "Thesis",
         "is_corpus_data": False,
-        "is_action_required": False
+        "is_action_required": False,
+        "type": "Bibliography"
     },
     "heurist journal volume": {
         "safe_sql_name": "HeuristJournalVolume",
         "is_corpus_data": False,
-        "is_action_required": False
+        "is_action_required": False,
+        "type": "Bibliography"
     },
     "journal": {
         "safe_sql_name": "Journal",
         "is_corpus_data": False,
-        "is_action_required": False
+        "is_action_required": False,
+        "type": "Bibliography"
     },
     "journal article": {
         "safe_sql_name": "JournalArticle",
         "is_corpus_data": False,
-        "is_action_required": False
+        "is_action_required": False,
+        "type": "Bibliography"
     },
     "publication series": {
         "safe_sql_name": "PublicationSeries",
         "is_corpus_data": False,
-        "is_action_required": False
+        "is_action_required": False,
+        "type": "Bibliography"
     },
     "non-corpus tables": {
         "len_query": "SELECT count(DISTINCT {table}.\"H-ID\") FROM {table}",
-        "scalar_query": "SELECT count(DISTINCT {table}.\"H-ID\") FROM {table} "
-                        "WHERE {table}.\"{detail}\" IS NULL",
-        "list_query": "SELECT count(DISTINCT {table}.\"H-ID\") FROM {table} "
-                      "WHERE ({table}.\"{detail}\" IS NULL OR array_length({table}.\"{detail}\") = 0)",
         "action_required": "SELECT count(DISTINCT {table}.\"H-ID\") FROM {table} "
                            "WHERE {table}.review_status = 'Action required'"
 

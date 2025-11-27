@@ -16,22 +16,22 @@ class LostmaDB:
         self.schema_dir = Path(self.database + "_schema")
         self._con = None
 
-    def download_database(self) -> None:
+    def download_database(self, type_arg: list = None) -> None:
         """
         Use Heurist-API CLI to download the db
             heurist -d DB -l LOGIN -p PASSWORD download -f FILE.DB
         """
         cmd = [
-                  self.cli_path,
-                  "-d", self.database,
-                  "-l", self.login,
-                  "-p", self.password,
-                  "download",
-                  "-f", str(self.duckdb_path),
-              ]
+            self.cli_path,
+            "-d", self.database,
+            "-l", self.login,
+            "-p", self.password,
+            "download",
+            "-f", str(self.duckdb_path),
+              ] + type_arg
         subprocess.run(cmd, check=True)
 
-    def download_schema(self) -> None:
+    def download_schema(self, type_arg: list = None) -> None:
         """
         Use Heurist-API CLI to download the schema
             heurist -d DB -l LOGIN -p PASSWORD schema -t csv
@@ -43,15 +43,25 @@ class LostmaDB:
             "-p", self.password,
             "schema",
             "-t", "csv",
-        ]
+        ] + type_arg
         subprocess.run(cmd, check=True)
 
-    def sync(self) -> None:
+    def _close_connection(self):
+        if self._con is not None:
+            self._con.close()
+            self._con = None
+
+    def sync(self, type_table: str = None) -> None:
         """
         Download the db and its schema
         """
-        self.download_database()
-        self.download_schema()
+        if type_table:
+            type_arg = ["-r", type_table]
+        else:
+            type_arg = []
+        self._close_connection()
+        self.download_database(type_arg)
+        self.download_schema(type_arg)
 
     def sql(self, query: str, params: list = None, is_df : bool = True):
         """
@@ -67,8 +77,6 @@ class LostmaDB:
     def texts(self, languages: list = None):
         """
         Return the content of the text table
-
-        :param languages: list, optional
             Filter on the language_COLUMN attribute (ex: 'dum (Middle Dutch)')
         """
 
@@ -80,8 +88,6 @@ class LostmaDB:
     def witnesses(self, languages: list = None):
         """
         Return the content of the witness table
-
-        :param languages: list, optional
             Filter on the language_COLUMN text attribute (ex: 'dum (Middle Dutch)')
         """
 
@@ -92,6 +98,18 @@ class LostmaDB:
                 languages = [languages]
             query += f"WHERE TextTable.language_COLUMN IN ('{"', '".join(languages)}')"
         return self.sql(query)
+
+    def is_table_exists(self, table_name: str, sql_name: str) -> None:
+        """Check if table is available on the db, if not download it"""
+        row = self.sql(
+            "SELECT 1 FROM duckdb_tables WHERE table_name = ?;",
+            [sql_name],
+            is_df=False
+        ).fetchone()
+        if not row:
+            type_table = LOSTMA_TABLES[table_name]["type"]
+            print(f"Table {table_name} is not available. Downloading...")
+            self.sync(type_table)
 
     def analyse(self, name_table: str = None,
                 language: str = None):
@@ -105,9 +123,16 @@ class LostmaDB:
         if name_table[0].isupper():
             name_table = name_table[0].lower() + name_table[1:]
         sql_name = LOSTMA_TABLES[name_table]["safe_sql_name"]
-        columns = self.sql("SELECT column_name FROM information_schema.columns "
-                           "WHERE table_name = ?;", [sql_name], is_df=False).fetchall()
-        columns = [f[0] for f in columns]
+        self.is_table_exists(name_table, sql_name)
+        rows = self.sql(
+            "SELECT column_name, data_type "
+            "FROM information_schema.columns "
+            "WHERE table_name = ?;",
+            [sql_name],
+            is_df=False,
+        ).fetchall()
+        col_types = {name: dtype for (name, dtype) in rows}
+        columns = list(col_types.keys())
         required_data = def_requirements(self.schema_dir)
         action_required = "No field for this table"
         if LOSTMA_TABLES[name_table]["is_corpus_data"]:
@@ -121,33 +146,54 @@ class LostmaDB:
             if len_table and LOSTMA_TABLES[name_table]["is_action_required"]:
                 action_required = self.sql(LOSTMA_TABLES["non-corpus tables"]["action_required"].format(table=sql_name),
                                            is_df=False).fetchone()[0]
-        list_empty = []
         if len_table:
+            agg_expr = []
+            col_metadata = []
             for column in columns:
-                if column not in ["H-ID", "type_id"] and "TRM-ID" not in column and column in required_data[sql_name]:
-                    req_type = required_data[sql_name][column]
-                    dtype = self.sql("SELECT data_type FROM information_schema.columns "
-                                     "WHERE table_name = ? AND column_name = ?", [sql_name, column],
-                                     is_df=False).fetchone()[0]
-                    if dtype.endswith('[]'):
-                        # checks whether the data is a list
-                        if LOSTMA_TABLES[name_table]["is_corpus_data"]:
-                            count_empty = self.sql(LOSTMA_TABLES[name_table]["list_query"].format(detail=column),
-                                                   [language], is_df=False).fetchone()[0]
-                        else:
-                            count_empty = self.sql(LOSTMA_TABLES["non-corpus tables"]["list_query"].format(
-                                detail=column, table=sql_name), is_df=False).fetchone()[0]
-                    else:
-                        if LOSTMA_TABLES[name_table]["is_corpus_data"]:
-                            count_empty = self.sql(LOSTMA_TABLES[name_table]["scalar_query"].format(detail=column),
-                                                   [language], is_df=False).fetchone()[0]
-                        else:
-                            count_empty = self.sql(LOSTMA_TABLES["non-corpus tables"]["scalar_query"].format(
-                                detail=column, table=sql_name), is_df=False).fetchone()[0]
-                    list_empty.append({'field': column,
-                                       'required statement': req_type,
-                                       'empty records': count_empty,
-                                       'percentage empty': round((count_empty / len_table) * 100, 2)})
+                if column in ["H-ID", "type_id"] or "TRM-ID" in column:
+                    continue
+                if column not in required_data[sql_name]:
+                    continue
+                req_type = required_data[sql_name][column]
+                dtype = col_types[column]
+                if dtype.endswith('[]'):
+                    expr = f"""
+                    SUM(
+                      CASE
+                        WHEN "{sql_name}"."{column}" IS NULL OR array_length("{sql_name}"."{column}") = 0
+                        THEN 1 ELSE 0
+                      END
+                    ) AS "{column}"
+                    """
+                else:
+                    expr = f"""
+                    SUM(
+                      CASE
+                        WHEN "{sql_name}"."{column}" IS NULL
+                        THEN 1 ELSE 0
+                      END
+                    ) AS "{column}"
+                    """
+                agg_expr.append(expr)
+                col_metadata.append((column, req_type))
+            agg_sql = ",\n".join(agg_expr)
+            if LOSTMA_TABLES[name_table]["is_corpus_data"]:
+                base_clause = LOSTMA_TABLES[name_table]["detail_query"].format(table=sql_name)
+                query = f"SELECT {agg_sql} {base_clause};"
+                params = [language]
+            else:
+                query = f"SELECT {agg_sql} FROM {sql_name};"
+                params = []
+            row = self.sql(query, params, is_df=False).fetchone()
+            list_empty = []
+            for (i, (column, req_type)) in enumerate(col_metadata):
+                count_empty = row[i]
+                list_empty.append({
+                    "field": column,
+                    "required statement": req_type,
+                    "empty records": count_empty,
+                    "percentage empty": round((count_empty / len_table) * 100, 2),
+                })
             return {
                 "completeness table": pd.DataFrame(list_empty),
                 "total records": len_table,
