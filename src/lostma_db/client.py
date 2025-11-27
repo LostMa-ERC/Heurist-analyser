@@ -14,6 +14,7 @@ class LostmaDB:
         base = Path.cwd()
         self.duckdb_path = Path(duckdb_path) if duckdb_path else base / "lostma.db"
         self.schema_dir = Path(self.database + "_schema")
+        self._con = None
 
     def download_database(self) -> None:
         """
@@ -52,13 +53,15 @@ class LostmaDB:
         self.download_database()
         self.download_schema()
 
-    def sql(self, query: str, params: list = None):
+    def sql(self, query: str, params: list = None, is_df : bool = True):
         """
         Execute a request and return a dataframe
         """
-        con = duckdb.connect(self.duckdb_path)
-        res = con.execute(query, params).fetchdf()
-        con.close()
+        if self._con is None:
+            self._con = duckdb.connect(self.duckdb_path)
+        res = self._con.execute(query, params)
+        if is_df:
+            res = res.fetchdf()
         return res
 
     def texts(self, languages: list = None):
@@ -103,40 +106,44 @@ class LostmaDB:
             name_table = name_table[0].lower() + name_table[1:]
         sql_name = LOSTMA_TABLES[name_table]["safe_sql_name"]
         columns = self.sql("SELECT column_name FROM information_schema.columns "
-                           "WHERE table_name = ?;", [sql_name])["column_name"].tolist()
+                           "WHERE table_name = ?;", [sql_name], is_df=False).fetchall()
+        columns = [f[0] for f in columns]
         required_data = def_requirements(self.schema_dir)
         action_required = "No field for this table"
         if LOSTMA_TABLES[name_table]["is_corpus_data"]:
-            len_table = self.sql(LOSTMA_TABLES[name_table]["len_query"], [language]).iloc[0, 0]
+            len_table = self.sql(LOSTMA_TABLES[name_table]["len_query"], [language], is_df=False).fetchone()[0]
             if len_table and LOSTMA_TABLES[name_table]["action_required"]:
-                action_required = self.sql(LOSTMA_TABLES[name_table]["action_required"], [language]).iloc[0, 0]
+                action_required = self.sql(LOSTMA_TABLES[name_table]["action_required"], [language],
+                                           is_df=False).fetchone()[0]
         else:
-            len_table = self.sql(LOSTMA_TABLES["non-corpus tables"]["len_query"].format(table=sql_name)).iloc[0, 0]
+            len_table = self.sql(LOSTMA_TABLES["non-corpus tables"]["len_query"].format(table=sql_name),
+                                 is_df=False).fetchone()[0]
             if len_table and LOSTMA_TABLES[name_table]["is_action_required"]:
-                action_required = self.sql(LOSTMA_TABLES["non-corpus tables"]["action_required"].format(table=sql_name)
-                                           ).iloc[0, 0]
+                action_required = self.sql(LOSTMA_TABLES["non-corpus tables"]["action_required"].format(table=sql_name),
+                                           is_df=False).fetchone()[0]
         list_empty = []
         if len_table:
             for column in columns:
                 if column not in ["H-ID", "type_id"] and "TRM-ID" not in column and column in required_data[sql_name]:
                     req_type = required_data[sql_name][column]
                     dtype = self.sql("SELECT data_type FROM information_schema.columns "
-                                     "WHERE table_name = ? AND column_name = ?", [sql_name, column]).iloc[0, 0]
+                                     "WHERE table_name = ? AND column_name = ?", [sql_name, column],
+                                     is_df=False).fetchone()[0]
                     if dtype.endswith('[]'):
                         # checks whether the data is a list
                         if LOSTMA_TABLES[name_table]["is_corpus_data"]:
                             count_empty = self.sql(LOSTMA_TABLES[name_table]["list_query"].format(detail=column),
-                                                   [language]).iloc[0, 0]
+                                                   [language], is_df=False).fetchone()[0]
                         else:
                             count_empty = self.sql(LOSTMA_TABLES["non-corpus tables"]["list_query"].format(
-                                detail=column, table=sql_name)).iloc[0, 0]
+                                detail=column, table=sql_name), is_df=False).fetchone()[0]
                     else:
                         if LOSTMA_TABLES[name_table]["is_corpus_data"]:
                             count_empty = self.sql(LOSTMA_TABLES[name_table]["scalar_query"].format(detail=column),
-                                                   [language]).iloc[0, 0]
+                                                   [language], is_df=False).fetchone()[0]
                         else:
                             count_empty = self.sql(LOSTMA_TABLES["non-corpus tables"]["scalar_query"].format(
-                                detail=column, table=sql_name)).iloc[0, 0]
+                                detail=column, table=sql_name), is_df=False).fetchone()[0]
                     list_empty.append({'field': column,
                                        'required statement': req_type,
                                        'empty records': count_empty,
