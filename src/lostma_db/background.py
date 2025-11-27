@@ -3,7 +3,7 @@ from dataclasses import dataclass
 import re
 
 """
-Tout ça c'est que du code piqué depuis l'Heurist-API de Kelly
+Here are some required function directly copy-paste from the Heurist-API
 """
 
 @dataclass

@@ -15,6 +15,7 @@ class LostmaDB:
         self.duckdb_path = Path(duckdb_path) if duckdb_path else base / "lostma.db"
         self.schema_dir = Path(self.database + "_schema")
         self._con = None
+        self._requirements = None
 
     def download_database(self, type_arg: list = None) -> None:
         """
@@ -50,6 +51,11 @@ class LostmaDB:
         if self._con is not None:
             self._con.close()
             self._con = None
+
+    def get_requirements(self, table: str):
+        if self._requirements is None:
+            self._requirements = def_requirements(self.schema_dir)
+        return self._requirements.get(table, {})
 
     def sync(self, type_table: str = None) -> None:
         """
@@ -112,13 +118,9 @@ class LostmaDB:
             self.sync(type_table)
 
     def analyse(self, name_table: str = None,
-                language: str = None):
+                language: str = None) -> dict | str:
         """
         A function to analyse the completeness of each table for each corpus
-
-        :param language: str
-        :param name_table: str
-        :return: dict
         """
         if name_table[0].isupper():
             name_table = name_table[0].lower() + name_table[1:]
@@ -133,7 +135,7 @@ class LostmaDB:
         ).fetchall()
         col_types = {name: dtype for (name, dtype) in rows}
         columns = list(col_types.keys())
-        required_data = def_requirements(self.schema_dir)
+        requirements = self.get_requirements(sql_name)
         action_required = "No field for this table"
         if LOSTMA_TABLES[name_table]["is_corpus_data"]:
             len_table = self.sql(LOSTMA_TABLES[name_table]["len_query"], [language], is_df=False).fetchone()[0]
@@ -152,26 +154,19 @@ class LostmaDB:
             for column in columns:
                 if column in ["H-ID", "type_id"] or "TRM-ID" in column:
                     continue
-                if column not in required_data[sql_name]:
+                req_type = requirements.get(column)
+                if req_type is None:
                     continue
-                req_type = required_data[sql_name][column]
                 dtype = col_types[column]
                 if dtype.endswith('[]'):
                     expr = f"""
-                    SUM(
-                      CASE
-                        WHEN "{sql_name}"."{column}" IS NULL OR array_length("{sql_name}"."{column}") = 0
-                        THEN 1 ELSE 0
-                      END
-                    ) AS "{column}"
+                    COUNT(*) FILTER (WHERE "{sql_name}"."{column}" IS NULL) AS "{column}"
                     """
                 else:
                     expr = f"""
-                    SUM(
-                      CASE
-                        WHEN "{sql_name}"."{column}" IS NULL
-                        THEN 1 ELSE 0
-                      END
+                    COUNT(*) FILTER (
+                      WHERE "{sql_name}"."{column}" IS NULL
+                         OR array_length("{sql_name}"."{column}") = 0
                     ) AS "{column}"
                     """
                 agg_expr.append(expr)
