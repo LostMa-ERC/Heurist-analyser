@@ -160,14 +160,14 @@ class LostmaDB:
                 dtype = col_types[column]
                 if dtype.endswith('[]'):
                     expr = f"""
-                    COUNT(*) FILTER (WHERE "{sql_name}"."{column}" IS NULL) AS "{column}"
-                    """
-                else:
-                    expr = f"""
                     COUNT(*) FILTER (
                       WHERE "{sql_name}"."{column}" IS NULL
                          OR array_length("{sql_name}"."{column}") = 0
                     ) AS "{column}"
+                    """
+                else:
+                    expr = f"""
+                    COUNT(*) FILTER (WHERE "{sql_name}"."{column}" IS NULL) AS "{column}"
                     """
                 agg_expr.append(expr)
                 col_metadata.append((column, req_type))
