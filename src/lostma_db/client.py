@@ -98,7 +98,9 @@ class LostmaDB:
         """
 
         query = ("SELECT * FROM witness "
-                 "LEFT JOIN TextTable ON witness.\"is_manifestation_of H-ID\" = TextTable.\"H-ID\" ")
+                 "LEFT JOIN TextTable ON witness.\"is_manifestation_of H-ID\" = TextTable.\"H-ID\" "
+                 "LEFT JOIN part ON list_contains(witness.\"observed_on_pages H-ID\", part.\"H-ID\") = TRUE "
+                 "LEFT JOIN document ON part.\"is_inscribed_on H-ID\" = DocumentTable.\"H-ID\" ")
         if languages:
             if isinstance(languages, str):
                 languages = [languages]
