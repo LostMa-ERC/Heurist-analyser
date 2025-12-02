@@ -203,7 +203,7 @@ class LostmaDB:
         """
             Return the data necessary to study the tradition of manuscripts
         """
-        query = ("SELECT witness.\"H-ID\", TextTable.\"H-ID\" FROM witness "
+        query = ("SELECT witness.\"H-ID\" AS witness_id, TextTable.\"H-ID\" AS text_id FROM witness "
                  "INNER JOIN TextTable ON witness.\"is_manifestation_of H-ID\" = TextTable.\"H-ID\" ")
         if languages:
             if isinstance(languages, str):
