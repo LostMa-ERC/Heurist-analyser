@@ -198,3 +198,15 @@ class LostmaDB:
             }
         else:
             return "No data"
+
+    def tradition(self, languages: list = None):
+        """
+            Return the data necessary to study the tradition of manuscripts
+        """
+        query = ("SELECT witness.\"H-ID\", TextTable.\"H-ID\" FROM witness "
+                 "INNER JOIN TextTable ON witness.\"is_manifestation_of H-ID\" = TextTable.\"H-ID\" ")
+        if languages:
+            if isinstance(languages, str):
+                languages = [languages]
+            query += f"WHERE TextTable.language_COLUMN IN ('{"', '".join(languages)}')"
+        return self.sql(query)
