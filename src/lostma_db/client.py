@@ -5,6 +5,7 @@ from pathlib import Path
 from .general import def_requirements
 from .lostma_tables import LOSTMA_TABLES
 
+
 class LostmaDB:
     def __init__(self, login, password, duckdb_path: str | Path | None = None):
         self.database = "jbcamps_gestes"
@@ -52,10 +53,18 @@ class LostmaDB:
             self._con.close()
             self._con = None
 
-    def get_requirements(self, table: str):
+    def _get_requirements(self, name_table: str):
         if self._requirements is None:
             self._requirements = def_requirements(self.schema_dir)
-        return self._requirements.get(table, {})
+        return self._requirements.get(name_table, {})
+
+    def _get_columns(self, sql_name: str) -> list[str]:
+        rows = self.sql(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = ?;",
+            [sql_name],
+            is_df=False,
+        ).fetchall()
+        return [r[0] for r in rows]
 
     def sync(self, type_table: str = None) -> None:
         """
@@ -80,32 +89,70 @@ class LostmaDB:
             res = res.fetchdf()
         return res
 
-    def texts(self, languages: list = None):
+    def table(self, base_table: str, condition: str = None , joins: list[dict] = None):
+        """
+        Return the content of a table
+            Filter on a condition and add joins if there are any
+        """
+        if joins:
+            # build a specific select to avoid ambiguous column names on joined tables
+            join_tables = [j["table"] for j in (joins or [])]
+            all_tables = [base_table] + join_tables
+            table_cols: dict[str, list[str]] = {}
+            for t in all_tables:
+                table_cols[t] = self._get_columns(t)
+            col_count: dict[str, int] = {}
+            for cols in table_cols.values():
+                for c in cols:
+                    col_count[c] = col_count.get(c, 0) + 1
+            select_expr = []
+            for t in all_tables:
+                for c in table_cols[t]:
+                    col_ref = f'{t}."{c}"'
+                    if t != base_table and col_count[c] > 1:
+                        alias = f'{c}_{t}'
+                        select_expr.append(f'{col_ref} AS "{alias}"')
+                    else:
+                        select_expr.append(col_ref)
+            select_clause = ",\n    ".join(select_expr)
+            query = f"SELECT\n    {select_clause}\nFROM {base_table} "
+            for join in joins:
+                query += " ".join(join.values())
+        else:
+            query = f"SELECT * FROM {base_table} "
+        if condition:
+            query += condition
+        return self.sql(query)
+
+    def texts(self, languages: list | str = None):
         """
         Return the content of the text table
             Filter on the language_COLUMN attribute (ex: 'dum (Middle Dutch)')
         """
-
-        query = "SELECT * FROM TextTable "
         if languages:
-            query += f"WHERE language_COLUMN IN ('{"', '".join(languages)}')"
-        return self.sql(query)
+            if isinstance(languages, str):
+                languages = [languages]
+            condition = f"WHERE language_COLUMN IN ('{"', '".join(languages)}')"
+            return self.table("TextTable", condition)
+        return self.table("TextTable")
 
-    def witnesses(self, languages: list = None):
+    def witnesses(self, languages: list | str = None):
         """
         Return the content of the witness table
             Filter on the language_COLUMN text attribute (ex: 'dum (Middle Dutch)')
         """
-
-        query = ("SELECT * FROM witness "
-                 "LEFT JOIN TextTable ON witness.\"is_manifestation_of H-ID\" = TextTable.\"H-ID\" "
-                 "LEFT JOIN part ON list_contains(witness.\"observed_on_pages H-ID\", part.\"H-ID\") = TRUE "
-                 "LEFT JOIN DocumentTable ON part.\"is_inscribed_on H-ID\" = DocumentTable.\"H-ID\" ")
+        condition = ""
+        joins = [{"type_join": "LEFT JOIN", "table": "TextTable",
+                  "on": "ON witness.\"is_manifestation_of H-ID\" = TextTable.\"H-ID\" "},
+                 {"type_join": "LEFT JOIN", "table":  "Part",
+                  "on":  "ON list_contains(witness.\"observed_on_pages H-ID\", part.\"H-ID\") = TRUE "},
+                 {"type_join": "LEFT JOIN", "table":  "DocumentTable",
+                  "on":  "ON part.\"is_inscribed_on H-ID\" = DocumentTable.\"H-ID\" "}]
         if languages:
             if isinstance(languages, str):
                 languages = [languages]
-            query += f"WHERE TextTable.language_COLUMN IN ('{"', '".join(languages)}')"
-        return self.sql(query)
+            condition = f"WHERE TextTable.language_COLUMN IN ('{"', '".join(languages)}')"
+        return self.table("Witness", condition, joins)
 
     def is_table_exists(self, table_name: str, sql_name: str) -> None:
         """Check if table is available on the db, if not download it"""
@@ -137,7 +184,7 @@ class LostmaDB:
         ).fetchall()
         col_types = {name: dtype for (name, dtype) in rows}
         columns = list(col_types.keys())
-        requirements = self.get_requirements(sql_name)
+        requirements = self._get_requirements(sql_name)
         action_required = "No field for this table"
         if LOSTMA_TABLES[name_table]["is_corpus_data"]:
             len_table = self.sql(LOSTMA_TABLES[name_table]["len_query"], [language], is_df=False).fetchone()[0]
@@ -210,3 +257,39 @@ class LostmaDB:
                 languages = [languages]
             query += f"WHERE TextTable.language_COLUMN IN ('{"', '".join(languages)}')"
         return self.sql(query)
+
+
+def interval(table: pd.DataFrame, attribute: str, year_min: int, year_max: int) -> pd.DataFrame:
+    """
+    A filter that extracts data from a specific time interval
+    """
+    if isinstance(year_min, str):
+        year_min = str(year_min)
+    if isinstance(year_max, str):
+        year_max = str(year_max)
+
+    def extract_interval(d):
+        if not isinstance(d, dict):
+            return pd.NaT, pd.NaT
+        if "value" in d and d["value"]:
+            return d["value"], d["value"]
+        start = d.get("estMinDate")
+        end = d.get("estMaxDate")
+        if not start and not end:
+            return pd.NaT, pd.NaT
+        return start, end
+
+    intervals = table[attribute].apply(extract_interval)
+    intervals = pd.DataFrame(intervals.tolist(), index=table.index, columns=["start", "end"])
+    intervals["start"] = (
+        intervals["start"].astype(str)
+        .str.split("-", n=1).str[0]
+    )
+    intervals["start"] = pd.to_numeric(intervals["start"], errors="coerce")
+    intervals["end"] = (
+        intervals["end"].astype(str)
+        .str.split("-", n=1).str[0]
+    )
+    intervals["end"] = pd.to_numeric(intervals["end"], errors="coerce")
+    mask = (intervals["end"] >= year_min) & (intervals["start"] <= year_max)
+    return table[mask]

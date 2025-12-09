@@ -1,1 +1,1 @@
-from .client import LostmaDB
+from .client import LostmaDB, interval
