@@ -4,6 +4,7 @@ import pandas as pd
 from pathlib import Path
 from .general import def_requirements
 from .lostma_tables import LOSTMA_TABLES
+from .tei_depot import TeiDepotClient
 
 
 class LostmaDB:
@@ -163,7 +164,7 @@ class LostmaDB:
         ).fetchone()
         if not row:
             type_table = LOSTMA_TABLES[table_name]["type"]
-            print(f"Table {table_name} is not available. Downloading...")
+            print(f"Table {table_name} is not yet available. Downloading...")
             self.sync(type_table)
 
     def analyse(self, name_table: str = None,
@@ -264,9 +265,9 @@ def interval(table: pd.DataFrame, attribute: str, year_min: int, year_max: int) 
     A filter that extracts data from a specific time interval
     """
     if isinstance(year_min, str):
-        year_min = str(year_min)
+        year_min = int(year_min)
     if isinstance(year_max, str):
-        year_max = str(year_max)
+        year_max = int(year_max)
 
     def extract_interval(d):
         if not isinstance(d, dict):
@@ -293,3 +294,15 @@ def interval(table: pd.DataFrame, attribute: str, year_min: int, year_max: int) 
     intervals["end"] = pd.to_numeric(intervals["end"], errors="coerce")
     mask = (intervals["end"] >= year_min) & (intervals["start"] <= year_max)
     return table[mask]
+
+def download_text_in_tei(text_ids: list[int] | int | str):
+    """
+    Download the TEI file corresponding to the id
+    """
+    if not isinstance(text_ids, list):
+        text_ids = [text_ids]
+    client = TeiDepotClient()
+    for text_id in text_ids:
+        text_id = str(text_id)
+        file = client.download_by_id(text_id, dest_dir="output")
+        print("Downloaded :", file)
