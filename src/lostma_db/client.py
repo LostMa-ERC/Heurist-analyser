@@ -304,5 +304,5 @@ def download_text_in_tei(text_ids: list[int] | int | str):
     client = TeiDepotClient()
     for text_id in text_ids:
         text_id = str(text_id)
-        file = client.download_by_id(text_id, dest_dir="output")
+        file = client.download_by_id(text_id, dest_dir="output/")
         print("Downloaded :", file)
