@@ -1,1 +1,1 @@
-from .client import LostmaDB, interval
+from .client import LostmaDB, interval, download_text_in_tei
