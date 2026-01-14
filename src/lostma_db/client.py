@@ -297,7 +297,7 @@ def interval(table: pd.DataFrame, attribute: str, year_min: int, year_max: int) 
 
 def download_text_in_tei(text_ids: list[int] | int | str):
     """
-    Download the TEI file corresponding to the id
+    Download the TEI file corresponding to the id from their GitHub repository
     """
     if not isinstance(text_ids, list):
         text_ids = [text_ids]
