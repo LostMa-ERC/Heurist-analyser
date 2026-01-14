@@ -95,5 +95,7 @@ class TeiDepotClient:
         """
         Download the TEI file corresponding to the id
         """
+        dest_dir = Path(dest_dir)
+        dest_dir.mkdir(parents=True, exist_ok=True)
         path = self.find_path_by_id(tei_id, index=index)
         return self.download_file(path, dest_dir)
