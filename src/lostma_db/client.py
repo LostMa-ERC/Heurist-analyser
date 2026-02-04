@@ -1,4 +1,3 @@
-import subprocess
 import duckdb
 import pandas as pd
 from pathlib import Path
@@ -8,6 +7,7 @@ from .tei_depot import TeiDepotClient
 from heurist.api.connection import HeuristAPIConnection
 from heurist.workflows.etl import extract_transform_load
 from heurist.schema import export_schema
+from heurist.utils.constants import DEFAULT_RECORD_GROUPS
 
 
 class LostmaDB:
@@ -21,7 +21,7 @@ class LostmaDB:
         self._con = None
         self._requirements = None
 
-    def download_database(self, type_arg: tuple = None) -> None:
+    def download_database(self, type_arg: tuple = DEFAULT_RECORD_GROUPS) -> None:
         """
         Use Heurist-API to download the DB
         """
@@ -31,7 +31,7 @@ class LostmaDB:
                 client=client, duckdb_connection=conn, record_group_names=type_arg
             )
 
-    def download_schema(self, type_arg: tuple = None) -> None:
+    def download_schema(self, type_arg: tuple = DEFAULT_RECORD_GROUPS) -> None:
         """
         Use Heurist-API to download the schema
         """
@@ -68,6 +68,8 @@ class LostmaDB:
         """
         if type_table:
             type_table = tuple(type_table)
+        else:
+            type_table = DEFAULT_RECORD_GROUPS
         self._close_connection()
         self.download_database(type_table)
         self.download_schema(type_table)
