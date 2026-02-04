@@ -66,7 +66,8 @@ class LostmaDB:
         """
         Download the db and its schema
         """
-        type_table = tuple(type_table)
+        if type_table:
+            type_table = tuple(type_table)
         self._close_connection()
         self.download_database(type_table)
         self.download_schema(type_table)
