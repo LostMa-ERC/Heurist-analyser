@@ -5,6 +5,9 @@ from pathlib import Path
 from .general import def_requirements
 from .lostma_tables import LOSTMA_TABLES
 from .tei_depot import TeiDepotClient
+from heurist.api.connection import HeuristAPIConnection
+from heurist.workflows.etl import extract_transform_load
+from heurist.schema import export_schema
 
 
 class LostmaDB:
@@ -12,42 +15,34 @@ class LostmaDB:
         self.database = "jbcamps_gestes"
         self.login = login
         self.password = password
-        self.cli_path = "heurist"
         base = Path.cwd()
         self.duckdb_path = Path(duckdb_path) if duckdb_path else base / "lostma.db"
         self.schema_dir = Path(self.database + "_schema")
         self._con = None
         self._requirements = None
 
-    def download_database(self, type_arg: list = None) -> None:
+    def download_database(self, type_arg: tuple = None) -> None:
         """
-        Use Heurist-API CLI to download the db
-            heurist -d DB -l LOGIN -p PASSWORD download -f FILE.DB
+        Use Heurist-API to download the DB
         """
-        cmd = [
-            self.cli_path,
-            "-d", self.database,
-            "-l", self.login,
-            "-p", self.password,
-            "download",
-            "-f", str(self.duckdb_path),
-              ] + type_arg
-        subprocess.run(cmd, check=True)
+        with HeuristAPIConnection(self.database, self.login, self.password) as client:
+            conn = duckdb.connect(self.duckdb_path)
+            extract_transform_load(
+                client=client, duckdb_connection=conn, record_group_names=type_arg
+            )
 
-    def download_schema(self, type_arg: list = None) -> None:
+    def download_schema(self, type_arg: tuple = None) -> None:
         """
-        Use Heurist-API CLI to download the schema
-            heurist -d DB -l LOGIN -p PASSWORD schema -t csv
+        Use Heurist-API to download the schema
         """
-        cmd = [
-            self.cli_path,
-            "-d", self.database,
-            "-l", self.login,
-            "-p", self.password,
-            "schema",
-            "-t", "csv",
-        ] + type_arg
-        subprocess.run(cmd, check=True)
+        export_schema(
+            db_name=self.database,
+            login=self.login,
+            password=self.password,
+            debugging=False,
+            output_type="csv",
+            record_group=type_arg
+        )
 
     def _close_connection(self):
         if self._con is not None:
@@ -71,13 +66,10 @@ class LostmaDB:
         """
         Download the db and its schema
         """
-        if type_table:
-            type_arg = ["-r", type_table]
-        else:
-            type_arg = []
+        type_table = tuple(type_table)
         self._close_connection()
-        self.download_database(type_arg)
-        self.download_schema(type_arg)
+        self.download_database(type_table)
+        self.download_schema(type_table)
 
     def sql(self, query: str, params: list = None, is_df : bool = True):
         """
