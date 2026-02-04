@@ -41,7 +41,8 @@ class LostmaDB:
             password=self.password,
             debugging=False,
             output_type="csv",
-            record_group=type_arg
+            record_group=list(type_arg),
+            outdir=self.database + "_schema"
         )
 
     def _close_connection(self):
