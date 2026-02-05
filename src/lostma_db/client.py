@@ -41,7 +41,7 @@ class LostmaDB:
             password=self.password,
             debugging=False,
             output_type="csv",
-            record_group=list(type_arg),
+            record_group=type_arg,
             outdir=self.database + "_schema"
         )
 
