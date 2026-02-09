@@ -292,19 +292,17 @@ def filter_by_interval(table: pd.DataFrame, attribute: str, year_min: int, year_
     return table[mask]
 
 
-def temporal_extent(table: pd.DataFrame, attribute: str) -> tuple[int, int]:
+def temporal_extent(table: pd.DataFrame, attribute: str) -> tuple[int | None, int | None]:
     mins, maxs = [], []
     for v in table[attribute]:
         if not isinstance(v, dict):
             continue
         if "value" in v and v["value"]:
-            mins.append(int(v["value"]))
-            maxs.append(int(v["value"]))
+            mins.append(v["value"].year)
+            maxs.append(v["value"].year)
         else:
-            start = v.get("estMinDate")
-            end = v.get("estMaxDate")
-            mins.append(int(start))
-            maxs.append(int(end))
+            mins.append(v.get("estMinDate").year)
+            maxs.append(v.get("estMaxDate").year)
     date_min = min(mins)
     date_max = max(maxs)
     return date_min, date_max
