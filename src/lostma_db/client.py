@@ -256,7 +256,7 @@ class LostmaDB:
         return self.sql(query)
 
 
-def interval(table: pd.DataFrame, attribute: str, year_min: int, year_max: int) -> pd.DataFrame:
+def filter_by_interval(table: pd.DataFrame, attribute: str, year_min: int, year_max: int) -> pd.DataFrame:
     """
     A filter that extracts data from a specific time interval
     """
@@ -290,6 +290,25 @@ def interval(table: pd.DataFrame, attribute: str, year_min: int, year_max: int) 
     intervals["end"] = pd.to_numeric(intervals["end"], errors="coerce")
     mask = (intervals["end"] >= year_min) & (intervals["start"] <= year_max)
     return table[mask]
+
+
+def temporal_extent(table: pd.DataFrame, attribute: str) -> tuple[int, int]:
+    mins, maxs = [], []
+    for v in table[attribute]:
+        if not isinstance(v, dict):
+            continue
+        if "value" in v and v["value"]:
+            mins.append(int(v["value"]))
+            maxs.append(int(v["value"]))
+        else:
+            start = v.get("estMinDate")
+            end = v.get("estMaxDate")
+            mins.append(int(start))
+            maxs.append(int(end))
+    date_min = min(mins)
+    date_max = max(maxs)
+    return date_min, date_max
+
 
 def download_text_in_tei(text_ids: list[int] | int | str):
     """

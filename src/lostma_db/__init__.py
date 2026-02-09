@@ -1,1 +1,1 @@
-from .client import LostmaDB, interval, download_text_in_tei
+from .client import LostmaDB, filter_by_interval, download_text_in_tei, temporal_extent
