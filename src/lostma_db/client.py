@@ -63,7 +63,7 @@ class LostmaDB:
         ).fetchall()
         return [r[0] for r in rows]
 
-    def _is_table_exists(self, table_name: str, sql_name: str | None) -> None:
+    def _is_table_exists(self, table_name: str, sql_name: str = None) -> None:
         """Check if table is available on the db, if not download it"""
         if not sql_name:
             sql_name = LOSTMA_TABLES[table_name]["safe_sql_name"]
