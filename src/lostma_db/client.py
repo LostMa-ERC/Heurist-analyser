@@ -66,7 +66,8 @@ class LostmaDB:
     def _is_table_exists(self, table_name: str, sql_name: str = None) -> None:
         """Check if table is available on the db, if not download it"""
         if not sql_name:
-            sql_name = LOSTMA_TABLES[table_name]["safe_sql_name"]
+            t_name = table_name.split(" ")[0]
+            sql_name = LOSTMA_TABLES[t_name]["safe_sql_name"]
         row = self.sql(
             "SELECT 1 FROM duckdb_tables WHERE table_name = ?;",
             [sql_name],
