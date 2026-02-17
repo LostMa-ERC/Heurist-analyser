@@ -127,7 +127,7 @@ class LostmaDB:
             recursives = []
             for t in selects:
                 table_cols[t] = selects[t]["attributes"]
-                if selects[t]["recursive"]:
+                if "recursive" in selects[t].keys():
                     walk = t + "_walk"
                     recursive_query = f""" {walk} AS (
                     SELECT
