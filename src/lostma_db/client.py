@@ -63,6 +63,20 @@ class LostmaDB:
         ).fetchall()
         return [r[0] for r in rows]
 
+    def _is_table_exists(self, table_name: str, sql_name: str | None) -> None:
+        """Check if table is available on the db, if not download it"""
+        if not sql_name:
+            sql_name = LOSTMA_TABLES[table_name]["safe_sql_name"]
+        row = self.sql(
+            "SELECT 1 FROM duckdb_tables WHERE table_name = ?;",
+            [sql_name],
+            is_df=False
+        ).fetchone()
+        if not row:
+            type_table = LOSTMA_TABLES[table_name]["type"]
+            print(f"Table {table_name} is not yet available. Downloading...")
+            self.sync(type_table)
+
     def sync(self, type_table: str = None) -> None:
         """
         Download the db and its schema
@@ -86,37 +100,98 @@ class LostmaDB:
             res = res.fetchdf()
         return res
 
-    def table(self, base_table: str, condition: str = None , joins: list[dict] = None):
+    def table(self,
+              base_table: str,
+              condition: str = None ,
+              joins: list[dict] = None,
+              selects: dict[str, dict] = None):
         """
         Return the content of a table
             Filter on a condition and add joins if there are any
         """
-        if joins:
-            # build a specific select to avoid ambiguous column names on joined tables
-            join_tables = [j["table"] for j in (joins or [])]
-            all_tables = [base_table] + join_tables
-            table_cols: dict[str, list[str]] = {}
-            for t in all_tables:
-                table_cols[t] = self._get_columns(t)
-            col_count: dict[str, int] = {}
-            for cols in table_cols.values():
-                for c in cols:
-                    col_count[c] = col_count.get(c, 0) + 1
+
+        def build_selects(cols_by_table):
+            """Build the select part of the query from a dictionary
+            of attributes ordered by table"""
             select_expr = []
-            for t in all_tables:
-                for c in table_cols[t]:
-                    col_ref = f'{t}."{c}"'
-                    if t != base_table and col_count[c] > 1:
-                        alias = f'{c}_{t}'
-                        select_expr.append(f'{col_ref} AS "{alias}"')
-                    else:
-                        select_expr.append(col_ref)
+            for table in cols_by_table:
+                for att in cols_by_table[table]:
+                    a = f"{table}.{att} AS {table}.{att}"
+                    select_expr.append(a)
             select_clause = ",\n    ".join(select_expr)
-            query = f"SELECT\n    {select_clause}\nFROM {base_table} "
+            select_query = f"SELECT\n    {select_clause}\nFROM {base_table} "
+            return select_query
+
+        if selects:
+            table_cols: dict[str, list[str]] = {}
+            recursives = []
+            for t in selects:
+                table_cols[t] = selects[t]["attributes"]
+                if selects[t]["recursive"]:
+                    walk = t + "_walk"
+                    recursive_query = f""" {walk} AS (
+                    SELECT
+                          c."H-ID"                      AS child_id,
+                          c."{selects[t]["recursive"]}" AS parent_id,
+                          1                             AS depth,
+                          [c."H-ID"]                    AS path
+                    FROM {t} c
+                    
+                    UNION ALL
+                    
+                    SELECT
+                        {walk}.child_id,
+                        p."{selects[t]["recursive"]}"   AS parent_id,
+                        {walk}.depth + 1                AS depth,
+                        {walk}.path || [p."H-ID"]       AS path
+                    FROM {walk}
+                    JOIN {t} p
+                    ON p."H-ID" = {walk}.parent_id
+                    WHERE {walk}.parent_id IS NOT NULL
+                    AND NOT list_contains({walk}.path, {walk}.parent_id)
+                    ),
+                    {t}_ancestors AS (
+                        SELECT
+                            {walk}.child_id,
+                            {walk}.depth,
+                            p.preferred_name AS ancestor_name
+                        FROM {walk}
+                        JOIN {t} p ON p."H-ID" = {walk}.parent_id
+                        )
+                    {t}_titles AS (
+                        SELECT
+                            child_id,
+                            string_agg(ancestor_name, ' > ' ORDER BY depth) AS {t}_ancestor_titles
+                        FROM {t}_ancestors
+                        GROUP BY child_id
+                    )
+                    """
+                    recursives.append(recursive_query)
+                    table_cols[t].append(f"{t}_ancestor_titles")
+                    joins.append(
+                        {"type_join": "LEFT JOIN", "table": f"{t}_titles",
+                         "on": f"ON {t}_titles.\"{selects[t]["recursive"]}\" = {t}.\"H-ID\" "}
+                    )
+            query = build_selects(table_cols)
+            if recursives:
+                start_recursive = "WITH RECURSIVE"
+                query = start_recursive + "\n    " + ",\n    ".join(recursives) + "\n    " + query
+        else:
+            query = "SELECT * "
+        if joins:
+            join_tables = [j["table"] for j in (joins or [])]
+            for join_table in join_tables:
+                self._is_table_exists(join_table)
+            if not selects:
+                all_tables = [base_table] + join_tables
+                table_cols: dict[str, list[str]] = {}
+                for t in all_tables:
+                    table_cols[t] = self._get_columns(t)
+                query = build_selects(table_cols)
             for join in joins:
                 query += " ".join(join.values())
         else:
-            query = f"SELECT * FROM {base_table} "
+            query += f"FROM {base_table} "
         if condition:
             query += condition
         return self.sql(query)
@@ -138,30 +213,79 @@ class LostmaDB:
         Return the content of the witness table
             Filter on the language_COLUMN text attribute (ex: 'dum (Middle Dutch)')
         """
+        select = {"Witness": {"attributes": ["H-ID", "is_unobserved", "claim_freetext", "preferred_siglum",
+                                             "alternative_sigla", "status_witness", "status_notes", "is_excerpt",
+                                             "scripta_freetext", "date_of_creation", "date_of_creation_certainty",
+                                             "date_of_creation_source", "date_freetext", "number_of_hands",
+                                             "scribe_note", "place_of_creation_source"]
+                              },
+                  "TextTable": {"attributes": ["H-ID", "preferred_name", "language", "literary_form", "is_hypothetical",
+                                               "claim_freetext", "length", "length_freetext", "verse_type",
+                                               "rhyme_type", "stanza_type", "nature_of_derivation", "tradition_status",
+                                               "status_notes", "scripta_freetext", "date_of_creation",
+                                               "date_of_creation_certainty", "date_of_creation_source", "date_freetext",
+                                               "author_freetext", "place_of_creation_source", "is_derived_from",
+                                               "observed_on_pages H-ID"]},
+                  "Witness_last_observed_in_doc": {"attributes": ["H-ID", "collection", "current_shelfmark",
+                                                                  "invented_label"]},
+                  "Text_is_derived_from": {"attributes": ["H-ID", "preferred_name"]},
+                  "Stemma": {"attributes": ["H-ID", "openstemmata-id"]},
+                  "Story": {"attributes": ["H-ID", "preferred_name", "peripheral"]},
+                  "Genre": {"attributes": ["H-ID", "preferred_name"],
+                            "recursive": ["parent_genre H-ID"]},
+                  "Storyverse": {"attributes": ["H-ID", "preferred_name"],
+                                 "recursive": ["member_of_cycle H-ID"]},
+                  "Witness_regional_writing_style": {"attributes": ["H-ID", "preferred_name", "language"]},
+                  "Text_regional_writing_style": {"attributes": ["H-ID", "preferred_name", "language"]},
+                  "Witness_scribe": {"attributes": ["H-ID", "given_names", "family_name", "floruit", "date_of_birth",
+                                            "date_of_death"]},
+                  "Text_author": {"attributes": ["H-ID", "given_names", "family_name", "floruit", "date_of_birth",
+                                            "date_of_death"]},
+                  "Text_adaptator": {"attributes": ["H-ID", "given_names", "family_name", "floruit", "date_of_birth",
+                                               "date_of_death"]},
+                  "Witness_place_of_creation": {"attributes": ["H-ID", "place_name", "administrative_region",
+                                                               "country"]},
+                  "Text_place_of_creation": {"attributes": ["H-ID", "place_name", "administrative_region", "country"]},
+                  "Witness_last_observed_in_doc_location": {"attributes": ["H-ID", "place_name",
+                                                                           "administrative_region", "country"]}}
         condition = ""
-        joins = [{"type_join": "LEFT JOIN", "table": "TextTable",
-                  "on": "ON witness.\"is_manifestation_of H-ID\" = TextTable.\"H-ID\" "},
-                 {"type_join": "LEFT JOIN", "table":  "Part",
-                  "on":  "ON list_contains(witness.\"observed_on_pages H-ID\", part.\"H-ID\") = TRUE "},
-                 {"type_join": "LEFT JOIN", "table":  "DocumentTable",
-                  "on":  "ON part.\"is_inscribed_on H-ID\" = DocumentTable.\"H-ID\" "}]
+        joins = [{"type_join": "LEFT JOIN", "table": "Scripta Witness_regional_writing_style",
+                  "on": "ON Witness.\"regional_writing_style H-ID\" = Witness_regional_writing_style.\"H-ID\" "},
+                 {"type_join": "LEFT JOIN", "table": "Person Witness_scribe",
+                  "on": "ON Witness.\"scribe H-ID\" = Witness_scribe.\"H-ID\" "},
+                 {"type_join": "LEFT JOIN", "table": "DocumentTable Witness_last_observed_in_doc",
+                  "on": "ON Witness.\"last_observed_in_doc H-ID\" = Witness_last_observed_in_doc.\"H-ID\" "},
+                 {"type_join": "LEFT JOIN", "table": "Place Witness_last_observed_in_doc_location",
+                  "on": "ON Witness_last_observed_in_doc.\"location H-ID\" "
+                        "= Witness_last_observed_in_doc_location.\"H-ID\" "},
+                 {"type_join": "LEFT JOIN", "table": "Place Witness_place_of_creation",
+                  "on": "ON Witness.\"place_of_creation H-ID\" = Witness_place_of_creation.\"H-ID\" "},
+                 {"type_join": "LEFT JOIN", "table": "TextTable",
+                  "on": "ON Witness.\"is_manifestation_of H-ID\" = TextTable.\"H-ID\" "},
+                 {"type_join": "LEFT JOIN", "table": "Genre",
+                  "on": "ON TextTable.\"specific_genre H-ID\" = Genre.\"H-ID\" "},
+                 {"type_join": "LEFT JOIN", "table": "Story",
+                  "on": "ON TextTable.\"is_expression_of H-ID\" = Story.\"H-ID\" "},
+                 {"type_join": "LEFT JOIN", "table": "Storyverse",
+                  "on": "ON Story.\"is_part_of_storyverse H-ID\" = Storyverse.\"H-ID\" "},
+                 {"type_join": "LEFT JOIN", "table": "Scripta Text_regional_writing_style",
+                  "on": "ON TextTable.\"regional_writing_style H-ID\" = Text_regional_writing_style.\"H-ID\" "},
+                 {"type_join": "LEFT JOIN", "table": "Person Text_author",
+                  "on": "ON TextTable.\"is_written_by H-ID\" = Text_author.\"H-ID\" "},
+                 {"type_join": "LEFT JOIN", "table": "Person Text_adaptator",
+                  "on": "ON TextTable.\"is_adapted_by H-ID\" = Text_adaptator.\"H-ID\" "},
+                 {"type_join": "LEFT JOIN", "table": "Place Text_place_of_creation",
+                  "on": "ON TextTable.\"place_of_creation H-ID\" = Text_place_of_creation.\"H-ID\" "},
+                 {"type_join": "LEFT JOIN", "table": "Stemma",
+                  "on": "ON TextTable.\"in_stemma H-ID\" = Stemma.\"H-ID\" "},
+                 {"type_join": "LEFT JOIN", "table": "TextTable Text_is_derived_from",
+                  "on": "ON TextTable.\"is_derived_from H-ID\" = Text_is_derived_from.\"H-ID\" "}
+                 ]
         if languages:
             if isinstance(languages, str):
                 languages = [languages]
             condition = f"WHERE TextTable.language_COLUMN IN ('{"', '".join(languages)}')"
-        return self.table("Witness", condition, joins)
-
-    def is_table_exists(self, table_name: str, sql_name: str) -> None:
-        """Check if table is available on the db, if not download it"""
-        row = self.sql(
-            "SELECT 1 FROM duckdb_tables WHERE table_name = ?;",
-            [sql_name],
-            is_df=False
-        ).fetchone()
-        if not row:
-            type_table = LOSTMA_TABLES[table_name]["type"]
-            print(f"Table {table_name} is not yet available. Downloading...")
-            self.sync(type_table)
+        return self.table("Witness", condition, joins, select)
 
     def analyse(self, name_table: str = None,
                 language: str = None) -> dict | str:
@@ -171,7 +295,7 @@ class LostmaDB:
         if name_table[0].isupper():
             name_table = name_table[0].lower() + name_table[1:]
         sql_name = LOSTMA_TABLES[name_table]["safe_sql_name"]
-        self.is_table_exists(name_table, sql_name)
+        self._is_table_exists(name_table, sql_name)
         rows = self.sql(
             "SELECT column_name, data_type "
             "FROM information_schema.columns "
