@@ -211,7 +211,7 @@ class LostmaDB:
                                                         )
                                                         """
                         recursives.append(recursive_query)
-                        table_cols[t].append(f"{t}_ancestor_titles")
+                        table_cols[f"{t}_titles"] = [f"{t}_ancestor_titles"]
                         joins.append(
                             {"type_join": "LEFT JOIN", "table": f"{t}_titles",
                              "on": f"ON {t}_titles.child_id = {t}.\"H-ID\" "}
@@ -228,7 +228,7 @@ class LostmaDB:
                 if "_titles" not in join_table:
                     name_table = join_table.split(" ")[0]
                     normal_name = LOSTMA_TABLES[name_table]["normal_name"]
-                    self._is_table_exists(normal_name, join_table)
+                    self._is_table_exists(normal_name, name_table)
             if not selects:
                 all_tables = [base_table] + join_tables
                 table_cols: dict[str, list[str]] = {}
@@ -264,19 +264,18 @@ class LostmaDB:
                                              "alternative_sigla", "status_witness", "status_notes", "is_excerpt",
                                              "scripta_freetext", "date_of_creation", "date_of_creation_certainty",
                                              "date_of_creation_source", "date_freetext", "number_of_hands",
-                                             "scribe_note", "place_of_creation_source"]},
+                                             "scribe_note", "place_of_creation_source", "\"observed_on_pages H-ID\""]},
                   "TextTable": {"attributes": ["\"H-ID\"", "preferred_name", "language_COLUMN", "literary_form",
                                                "is_hypothetical", "claim_freetext", "length", "length_freetext",
-                                               "verse_type", "rhyme_type", "stanza_type", "nature_of_derivation",
+                                               "verse_type", "rhyme_type", "stanza_type", "nature_of_derivations",
                                                "tradition_status", "status_notes", "scripta_freetext",
                                                "date_of_creation", "date_of_creation_certainty",
                                                "date_of_creation_source", "date_freetext", "author_freetext",
-                                               "place_of_creation_source", "is_derived_from",
-                                               "\"observed_on_pages H-ID\""]},
+                                               "place_of_creation_source", "\"is_derived_from H-ID\""]},
                   "Witness_last_observed_in_doc": {"attributes": ["\"H-ID\"", "collection", "current_shelfmark",
                                                                   "invented_label"]},
                   "Text_is_derived_from": {"attributes": ["\"H-ID\"", "preferred_name"]},
-                  "Stemma": {"attributes": ["\"H-ID\"", "\"openstemmata-id\""]},
+                  "Stemma": {"attributes": ["\"H-ID\"", "\"openstemmata id\""]},
                   "Story": {"attributes": ["\"H-ID\"", "preferred_name", "peripheral"]},
                   "Genre": {"attributes": ["\"H-ID\"", "preferred_name"],
                             "recursive": ["parent_genre H-ID"]},
@@ -286,9 +285,9 @@ class LostmaDB:
                   "Text_regional_writing_style": {"attributes": ["\"H-ID\"", "preferred_name", "language_COLUMN"]},
                   "Witness_scribe": {"attributes": ["\"H-ID\"", "given_names", "family_name", "floruit",
                                                     "date_of_birth", "date_of_death"]},
-                  "Text_author": {"attributes": ["\"H-ID\"", "given_names", "family_name", "floruit", "date_of_birth",
+                  "Text_is_written_by": {"attributes": ["\"H-ID\"", "given_names", "family_name", "floruit", "date_of_birth",
                                                  "date_of_death"]},
-                  "Text_adaptator": {"attributes": ["\"H-ID\"", "given_names", "family_name", "floruit",
+                  "Text_is_adapted_by": {"attributes": ["\"H-ID\"", "given_names", "family_name", "floruit",
                                                     "date_of_birth", "date_of_death"]},
                   "Witness_place_of_creation": {"attributes": ["\"H-ID\"", "place_name", "administrative_region",
                                                                "country"]},
@@ -300,34 +299,42 @@ class LostmaDB:
         joins = [{"type_join": "LEFT JOIN", "table": "Scripta Witness_regional_writing_style",
                   "on": "ON Witness.\"regional_writing_style H-ID\" = Witness_regional_writing_style.\"H-ID\" "},
                  {"type_join": "LEFT JOIN", "table": "Person Witness_scribe",
-                  "on": "ON Witness.\"scribe H-ID\" = Witness_scribe.\"H-ID\" "},
+                  "on": "ON True INNER JOIN UNNEST(Witness.\"scribe H-ID\") AS ws "
+                        "ON ws.unnest = Witness_scribe.\"H-ID\" "},
                  {"type_join": "LEFT JOIN", "table": "DocumentTable Witness_last_observed_in_doc",
                   "on": "ON Witness.\"last_observed_in_doc H-ID\" = Witness_last_observed_in_doc.\"H-ID\" "},
                  {"type_join": "LEFT JOIN", "table": "Place Witness_last_observed_in_doc_location",
                   "on": "ON Witness_last_observed_in_doc.\"location H-ID\" "
                         "= Witness_last_observed_in_doc_location.\"H-ID\" "},
                  {"type_join": "LEFT JOIN", "table": "Place Witness_place_of_creation",
-                  "on": "ON Witness.\"place_of_creation H-ID\" = Witness_place_of_creation.\"H-ID\" "},
+                  "on": "ON True INNER JOIN UNNEST(Witness.\"place_of_creation H-ID\") AS p "
+                        "ON p.unnest = Witness_place_of_creation.\"H-ID\" "},
                  {"type_join": "LEFT JOIN", "table": "TextTable",
                   "on": "ON Witness.\"is_manifestation_of H-ID\" = TextTable.\"H-ID\" "},
                  {"type_join": "LEFT JOIN", "table": "Genre",
                   "on": "ON TextTable.\"specific_genre H-ID\" = Genre.\"H-ID\" "},
                  {"type_join": "LEFT JOIN", "table": "Story",
-                  "on": "ON TextTable.\"is_expression_of H-ID\" = Story.\"H-ID\" "},
+                  "on": "ON True INNER JOIN UNNEST(TextTable.\"is_expression_of H-ID\") AS s "
+                        "ON s.unnest = Story.\"H-ID\" "},
                  {"type_join": "LEFT JOIN", "table": "Storyverse",
-                  "on": "ON Story.\"is_part_of_storyverse H-ID\" = Storyverse.\"H-ID\" "},
+                  "on": "ON True INNER JOIN UNNEST(Story.\"is_part_of_storyverse H-ID\") AS sv "
+                        "ON sv.unnest = Storyverse.\"H-ID\" "},
                  {"type_join": "LEFT JOIN", "table": "Scripta Text_regional_writing_style",
                   "on": "ON TextTable.\"regional_writing_style H-ID\" = Text_regional_writing_style.\"H-ID\" "},
-                 {"type_join": "LEFT JOIN", "table": "Person Text_author",
-                  "on": "ON TextTable.\"is_written_by H-ID\" = Text_author.\"H-ID\" "},
-                 {"type_join": "LEFT JOIN", "table": "Person Text_adaptator",
-                  "on": "ON TextTable.\"is_adapted_by H-ID\" = Text_adaptator.\"H-ID\" "},
+                 {"type_join": "LEFT JOIN", "table": "Person Text_is_written_by",
+                  "on": "ON True INNER JOIN UNNEST(TextTable.\"is_written_by H-ID\") AS tw "
+                        "ON tw.unnest = Text_is_written_by.\"H-ID\" "},
+                 {"type_join": "LEFT JOIN", "table": "Person Text_is_adapted_by",
+                  "on": "ON True INNER JOIN UNNEST(TextTable.\"is_adapted_by H-ID\") AS t "
+                        "ON t.unnest = Text_is_adapted_by.\"H-ID\" "},
                  {"type_join": "LEFT JOIN", "table": "Place Text_place_of_creation",
                   "on": "ON TextTable.\"place_of_creation H-ID\" = Text_place_of_creation.\"H-ID\" "},
                  {"type_join": "LEFT JOIN", "table": "Stemma",
-                  "on": "ON TextTable.\"in_stemma H-ID\" = Stemma.\"H-ID\" "},
+                  "on": "ON True INNER JOIN UNNEST(TextTable.\"in_stemma H-ID\") AS st "
+                        "ON st.unnest = Stemma.\"H-ID\" "},
                  {"type_join": "LEFT JOIN", "table": "TextTable Text_is_derived_from",
-                  "on": "ON TextTable.\"is_derived_from H-ID\" = Text_is_derived_from.\"H-ID\" "}
+                  "on": "ON True INNER JOIN UNNEST(TextTable.\"is_derived_from H-ID\") AS tt "
+                        "ON tt.unnest = Text_is_derived_from.\"H-ID\" "}
                  ]
         if languages:
             if isinstance(languages, str):
