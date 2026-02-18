@@ -145,71 +145,70 @@ class LostmaDB:
                     for recursive in selects[t]["recursive"]:
                         walk = t + "_walk"
                         if self._is_list(t, recursive):
-                            start = f""" {walk} AS (
-                                                SELECT
-                                                      c."H-ID"          AS child_id,
-                                                      u.parent_id       AS parent_id,
-                                                      1                 AS depth,
-                                                      [c."H-ID"]        AS path
-                                                FROM {t} c
-                                                CROSS JOIN UNNEST(c."{recursive}") AS u(parent_id)
+                            start = f"""{walk} AS (
+    SELECT
+        c."H-ID"          AS child_id,
+        u.parent_id       AS parent_id,
+        1                 AS depth,
+        [c."H-ID"]        AS path
+    FROM {t} c
+    CROSS JOIN UNNEST(c."{recursive}") AS u(parent_id)
 
-                                                UNION ALL
+    UNION ALL
 
-                                                SELECT
-                                                    {walk}.child_id,
-                                                    u2.parent_id                AS parent_id,
-                                                    {walk}.depth + 1            AS depth,
-                                                    {walk}.path || [p."H-ID"]   AS path
-                                                FROM {walk}
-                                                JOIN {t} p
-                                                ON p."H-ID" = {walk}.parent_id
-                                                CROSS JOIN UNNEST(p."{recursive}") AS u2(parent_id)
-                                                WHERE {walk}.parent_id IS NOT NULL
-                                                    AND u2.parent_id IS NOT NULL
-                                                    AND NOT list_contains({walk}.path, u2.parent_id)
-                                                ),
-                                                """
+    SELECT
+        {walk}.child_id,
+        u2.parent_id                AS parent_id,
+        {walk}.depth + 1            AS depth,
+        {walk}.path || [p."H-ID"]   AS path
+    FROM {walk}
+    JOIN {t} p
+    ON p."H-ID" = {walk}.parent_id
+    CROSS JOIN UNNEST(p."{recursive}") AS u2(parent_id)
+    WHERE {walk}.parent_id IS NOT NULL
+    AND u2.parent_id IS NOT NULL
+    AND NOT list_contains({walk}.path, u2.parent_id)
+    ),
+    """
                         else:
-                            start = f""" {walk} AS (
-                                                SELECT
-                                                      c."H-ID"          AS child_id,
-                                                      c."{recursive}"   AS parent_id,
-                                                      1                 AS depth,
-                                                      [c."H-ID"]        AS path
-                                                FROM {t} c
+                            start = f"""{walk} AS (
+    SELECT
+        c."H-ID"          AS child_id,
+        c."{recursive}"   AS parent_id,
+        1                 AS depth,
+        [c."H-ID"]        AS path
+    FROM {t} c
 
-                                                UNION ALL
+    UNION ALL
 
-                                                SELECT
-                                                    {walk}.child_id,
-                                                    p."{recursive}"             AS parent_id,
-                                                    {walk}.depth + 1            AS depth,
-                                                    {walk}.path || [p."H-ID"]   AS path
-                                                FROM {walk}
-                                                JOIN {t} p
-                                                ON p."H-ID" = {walk}.parent_id
-                                                WHERE {walk}.parent_id IS NOT NULL
-                                                    AND NOT list_contains({walk}.path, {walk}.parent_id)
-                                                ),
-                                                """
+    SELECT
+         {walk}.child_id,
+         p."{recursive}"             AS parent_id,
+         {walk}.depth + 1            AS depth,
+         {walk}.path || [p."H-ID"]   AS path
+    FROM {walk}
+    JOIN {t} p
+    ON p."H-ID" = {walk}.parent_id
+    WHERE {walk}.parent_id IS NOT NULL
+         AND NOT list_contains({walk}.path, {walk}.parent_id)
+    ),
+    """
                         recursive_query = start + f"""{t}_ancestors AS (
-                                                            SELECT
-                                                                {walk}.child_id,
-                                                                {walk}.depth,
-                                                                p.preferred_name AS ancestor_name
-                                                            FROM {walk}
-                                                            JOIN {t} p ON p."H-ID" = {walk}.parent_id
-                                                        ),
-                                                        {t}_titles AS (
-                                                            SELECT
-                                                                child_id,
-                                                                string_agg(ancestor_name, ' > ' ORDER BY depth) 
-                                                                AS {t}_ancestor_titles
-                                                            FROM {t}_ancestors
-                                                            GROUP BY child_id
-                                                        )
-                                                        """
+    SELECT
+        {walk}.child_id,
+        {walk}.depth,
+        p.preferred_name AS ancestor_name
+    FROM {walk}
+    JOIN {t} p ON p."H-ID" = {walk}.parent_id
+    ),
+    {t}_titles AS (
+    SELECT
+         child_id,
+         string_agg(ancestor_name, ' > ' ORDER BY depth) 
+         AS {t}_ancestor_titles
+    FROM {t}_ancestors
+    GROUP BY child_id
+    )"""
                         recursives.append(recursive_query)
                         table_cols[f"{t}_titles"] = [f"{t}_ancestor_titles"]
                         joins.append(
@@ -236,11 +235,13 @@ class LostmaDB:
                     table_cols[t] = self._get_columns(t)
                 query = build_selects(table_cols)
             for join in joins:
+                query += "\n    "
                 query += " ".join(join.values())
         else:
             query += f"FROM {base_table} "
         if condition:
             query += condition
+        print(query)
         return self.sql(query)
 
     def texts(self, languages: list | str = None):
@@ -299,7 +300,7 @@ class LostmaDB:
         joins = [{"type_join": "LEFT JOIN", "table": "Scripta Witness_regional_writing_style",
                   "on": "ON Witness.\"regional_writing_style H-ID\" = Witness_regional_writing_style.\"H-ID\" "},
                  {"type_join": "LEFT JOIN", "table": "Person Witness_scribe",
-                  "on": "ON True INNER JOIN UNNEST(Witness.\"scribe H-ID\") AS ws "
+                  "on": "ON True LEFT JOIN UNNEST(Witness.\"scribe H-ID\") AS ws "
                         "ON ws.unnest = Witness_scribe.\"H-ID\" "},
                  {"type_join": "LEFT JOIN", "table": "DocumentTable Witness_last_observed_in_doc",
                   "on": "ON Witness.\"last_observed_in_doc H-ID\" = Witness_last_observed_in_doc.\"H-ID\" "},
@@ -307,33 +308,33 @@ class LostmaDB:
                   "on": "ON Witness_last_observed_in_doc.\"location H-ID\" "
                         "= Witness_last_observed_in_doc_location.\"H-ID\" "},
                  {"type_join": "LEFT JOIN", "table": "Place Witness_place_of_creation",
-                  "on": "ON True INNER JOIN UNNEST(Witness.\"place_of_creation H-ID\") AS p "
+                  "on": "ON True LEFT JOIN UNNEST(Witness.\"place_of_creation H-ID\") AS p "
                         "ON p.unnest = Witness_place_of_creation.\"H-ID\" "},
                  {"type_join": "LEFT JOIN", "table": "TextTable",
                   "on": "ON Witness.\"is_manifestation_of H-ID\" = TextTable.\"H-ID\" "},
                  {"type_join": "LEFT JOIN", "table": "Genre",
                   "on": "ON TextTable.\"specific_genre H-ID\" = Genre.\"H-ID\" "},
                  {"type_join": "LEFT JOIN", "table": "Story",
-                  "on": "ON True INNER JOIN UNNEST(TextTable.\"is_expression_of H-ID\") AS s "
+                  "on": "ON True LEFT JOIN UNNEST(TextTable.\"is_expression_of H-ID\") AS s "
                         "ON s.unnest = Story.\"H-ID\" "},
                  {"type_join": "LEFT JOIN", "table": "Storyverse",
-                  "on": "ON True INNER JOIN UNNEST(Story.\"is_part_of_storyverse H-ID\") AS sv "
+                  "on": "ON True LEFT JOIN UNNEST(Story.\"is_part_of_storyverse H-ID\") AS sv "
                         "ON sv.unnest = Storyverse.\"H-ID\" "},
                  {"type_join": "LEFT JOIN", "table": "Scripta Text_regional_writing_style",
                   "on": "ON TextTable.\"regional_writing_style H-ID\" = Text_regional_writing_style.\"H-ID\" "},
                  {"type_join": "LEFT JOIN", "table": "Person Text_is_written_by",
-                  "on": "ON True INNER JOIN UNNEST(TextTable.\"is_written_by H-ID\") AS tw "
+                  "on": "ON True LEFT JOIN UNNEST(TextTable.\"is_written_by H-ID\") AS tw "
                         "ON tw.unnest = Text_is_written_by.\"H-ID\" "},
                  {"type_join": "LEFT JOIN", "table": "Person Text_is_adapted_by",
-                  "on": "ON True INNER JOIN UNNEST(TextTable.\"is_adapted_by H-ID\") AS t "
+                  "on": "ON True LEFT JOIN UNNEST(TextTable.\"is_adapted_by H-ID\") AS t "
                         "ON t.unnest = Text_is_adapted_by.\"H-ID\" "},
                  {"type_join": "LEFT JOIN", "table": "Place Text_place_of_creation",
                   "on": "ON TextTable.\"place_of_creation H-ID\" = Text_place_of_creation.\"H-ID\" "},
                  {"type_join": "LEFT JOIN", "table": "Stemma",
-                  "on": "ON True INNER JOIN UNNEST(TextTable.\"in_stemma H-ID\") AS st "
+                  "on": "ON True LEFT JOIN UNNEST(TextTable.\"in_stemma H-ID\") AS st "
                         "ON st.unnest = Stemma.\"H-ID\" "},
                  {"type_join": "LEFT JOIN", "table": "TextTable Text_is_derived_from",
-                  "on": "ON True INNER JOIN UNNEST(TextTable.\"is_derived_from H-ID\") AS tt "
+                  "on": "ON True LEFT JOIN UNNEST(TextTable.\"is_derived_from H-ID\") AS tt "
                         "ON tt.unnest = Text_is_derived_from.\"H-ID\" "}
                  ]
         if languages:
