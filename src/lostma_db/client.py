@@ -204,7 +204,8 @@ class LostmaDB:
                                                         {t}_titles AS (
                                                             SELECT
                                                                 child_id,
-                                                                string_agg(ancestor_name, ' > ' ORDER BY depth) AS {t}_ancestor_titles
+                                                                string_agg(ancestor_name, ' > ' ORDER BY depth) 
+                                                                AS {t}_ancestor_titles
                                                             FROM {t}_ancestors
                                                             GROUP BY child_id
                                                         )
@@ -213,7 +214,7 @@ class LostmaDB:
                         table_cols[t].append(f"{t}_ancestor_titles")
                         joins.append(
                             {"type_join": "LEFT JOIN", "table": f"{t}_titles",
-                             "on": f"ON {t}_titles.\"{recursive}\" = {t}.\"H-ID\" "}
+                             "on": f"ON {t}_titles.child_id = {t}.\"H-ID\" "}
                         )
             query = build_selects(table_cols)
             if recursives:
