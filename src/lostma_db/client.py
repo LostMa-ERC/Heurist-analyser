@@ -66,8 +66,7 @@ class LostmaDB:
     def _is_table_exists(self, table_name: str, sql_name: str = None) -> None:
         """Check if table is available on the db, if not download it"""
         if not sql_name:
-            t_name = table_name.split(" ")[0]
-            sql_name = LOSTMA_TABLES[t_name]["safe_sql_name"]
+            sql_name = LOSTMA_TABLES[table_name]["safe_sql_name"]
         row = self.sql(
             "SELECT 1 FROM duckdb_tables WHERE table_name = ?;",
             [sql_name],
@@ -182,7 +181,9 @@ class LostmaDB:
         if joins:
             join_tables = [j["table"] for j in (joins or [])]
             for join_table in join_tables:
-                self._is_table_exists(join_table)
+                name_table = join_table.split(" ")[0]
+                normal_name = LOSTMA_TABLES[name_table]["normal_name"]
+                self._is_table_exists(normal_name, join_table)
             if not selects:
                 all_tables = [base_table] + join_tables
                 table_cols: dict[str, list[str]] = {}
