@@ -157,7 +157,7 @@ class LostmaDB:
                             p.preferred_name AS ancestor_name
                         FROM {walk}
                         JOIN {t} p ON p."H-ID" = {walk}.parent_id
-                        )
+                    ),
                     {t}_titles AS (
                         SELECT
                             child_id,
