@@ -59,9 +59,23 @@ class LostmaDB:
         rows = self.sql(
             "SELECT column_name FROM information_schema.columns WHERE table_name = ?;",
             [sql_name],
-            is_df=False,
+            is_df=False
         ).fetchall()
         return [r[0] for r in rows]
+
+    def _is_list(self, table: str, attribute: str) -> bool:
+        attribute_type = self.sql(
+            """SELECT data_type
+               FROM information_schema.columns
+               WHERE table_name = ?
+               AND column_name = ?""",
+            [table, attribute],
+            is_df=False
+        ).fetchone()[0]
+        if attribute_type.endswith("[]") or attribute_type.startswith("LIST"):
+            return True
+        else:
+            return False
 
     def _is_table_exists(self, table_name: str, sql_name: str = None) -> None:
         """Check if table is available on the db, if not download it"""
@@ -130,43 +144,71 @@ class LostmaDB:
                 if "recursive" in selects[t].keys():
                     for recursive in selects[t]["recursive"]:
                         walk = t + "_walk"
-                        recursive_query = f""" {walk} AS (
-                        SELECT
-                              c."H-ID"          AS child_id,
-                              c."{recursive}"   AS parent_id,
-                              1                 AS depth,
-                              [c."H-ID"]        AS path
-                        FROM {t} c
-                        
-                        UNION ALL
-                        
-                        SELECT
-                            {walk}.child_id,
-                            p."{recursive}"             AS parent_id,
-                            {walk}.depth + 1            AS depth,
-                            {walk}.path || [p."H-ID"]   AS path
-                        FROM {walk}
-                        JOIN {t} p
-                        ON p."H-ID" = {walk}.parent_id
-                        WHERE {walk}.parent_id IS NOT NULL
-                        AND NOT list_contains({walk}.path, {walk}.parent_id)
-                        ),
-                        {t}_ancestors AS (
-                            SELECT
-                                {walk}.child_id,
-                                {walk}.depth,
-                                p.preferred_name AS ancestor_name
-                            FROM {walk}
-                            JOIN {t} p ON p."H-ID" = {walk}.parent_id
-                        ),
-                        {t}_titles AS (
-                            SELECT
-                                child_id,
-                                string_agg(ancestor_name, ' > ' ORDER BY depth) AS {t}_ancestor_titles
-                            FROM {t}_ancestors
-                            GROUP BY child_id
-                        )
-                        """
+                        if self._is_list(t, recursive):
+                            start = f""" {walk} AS (
+                                                SELECT
+                                                      c."H-ID"          AS child_id,
+                                                      u.parent_id       AS parent_id,
+                                                      1                 AS depth,
+                                                      [c."H-ID"]        AS path
+                                                FROM {t} c
+                                                CROSS JOIN UNNEST(c."{recursive}") AS u(parent_id)
+
+                                                UNION ALL
+
+                                                SELECT
+                                                    {walk}.child_id,
+                                                    u2.parent_id                AS parent_id,
+                                                    {walk}.depth + 1            AS depth,
+                                                    {walk}.path || [p."H-ID"]   AS path
+                                                FROM {walk}
+                                                JOIN {t} p
+                                                ON p."H-ID" = {walk}.parent_id
+                                                CROSS JOIN UNNEST(p."{recursive}") AS u2(parent_id)
+                                                WHERE {walk}.parent_id IS NOT NULL
+                                                    AND u2.parent_id IS NOT NULL
+                                                    AND NOT list_contains({walk}.path, u2.parent_id)
+                                                ),
+                                                """
+                        else:
+                            start = f""" {walk} AS (
+                                                SELECT
+                                                      c."H-ID"          AS child_id,
+                                                      c."{recursive}"   AS parent_id,
+                                                      1                 AS depth,
+                                                      [c."H-ID"]        AS path
+                                                FROM {t} c
+
+                                                UNION ALL
+
+                                                SELECT
+                                                    {walk}.child_id,
+                                                    p."{recursive}"             AS parent_id,
+                                                    {walk}.depth + 1            AS depth,
+                                                    {walk}.path || [p."H-ID"]   AS path
+                                                FROM {walk}
+                                                JOIN {t} p
+                                                ON p."H-ID" = {walk}.parent_id
+                                                WHERE {walk}.parent_id IS NOT NULL
+                                                    AND NOT list_contains({walk}.path, {walk}.parent_id)
+                                                ),
+                                                """
+                        recursive_query = start + f"""{t}_ancestors AS (
+                                                            SELECT
+                                                                {walk}.child_id,
+                                                                {walk}.depth,
+                                                                p.preferred_name AS ancestor_name
+                                                            FROM {walk}
+                                                            JOIN {t} p ON p."H-ID" = {walk}.parent_id
+                                                        ),
+                                                        {t}_titles AS (
+                                                            SELECT
+                                                                child_id,
+                                                                string_agg(ancestor_name, ' > ' ORDER BY depth) AS {t}_ancestor_titles
+                                                            FROM {t}_ancestors
+                                                            GROUP BY child_id
+                                                        )
+                                                        """
                         recursives.append(recursive_query)
                         table_cols[t].append(f"{t}_ancestor_titles")
                         joins.append(
