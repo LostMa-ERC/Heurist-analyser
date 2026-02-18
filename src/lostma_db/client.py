@@ -96,7 +96,7 @@ class LostmaDB:
         Download the db and its schema
         """
         if type_table:
-            type_table = tuple(type_table)
+            type_table = (type_table, )
         else:
             type_table = DEFAULT_RECORD_GROUPS
         self._close_connection()
