@@ -128,50 +128,51 @@ class LostmaDB:
             for t in selects:
                 table_cols[t] = selects[t]["attributes"]
                 if "recursive" in selects[t].keys():
-                    walk = t + "_walk"
-                    recursive_query = f""" {walk} AS (
-                    SELECT
-                          c."H-ID"                      AS child_id,
-                          c."{selects[t]["recursive"]}" AS parent_id,
-                          1                             AS depth,
-                          [c."H-ID"]                    AS path
-                    FROM {t} c
-                    
-                    UNION ALL
-                    
-                    SELECT
-                        {walk}.child_id,
-                        p."{selects[t]["recursive"]}"   AS parent_id,
-                        {walk}.depth + 1                AS depth,
-                        {walk}.path || [p."H-ID"]       AS path
-                    FROM {walk}
-                    JOIN {t} p
-                    ON p."H-ID" = {walk}.parent_id
-                    WHERE {walk}.parent_id IS NOT NULL
-                    AND NOT list_contains({walk}.path, {walk}.parent_id)
-                    ),
-                    {t}_ancestors AS (
+                    for recursive in selects[t]["recursive"]:
+                        walk = t + "_walk"
+                        recursive_query = f""" {walk} AS (
+                        SELECT
+                              c."H-ID"          AS child_id,
+                              c."{recursive}"   AS parent_id,
+                              1                 AS depth,
+                              [c."H-ID"]        AS path
+                        FROM {t} c
+                        
+                        UNION ALL
+                        
                         SELECT
                             {walk}.child_id,
-                            {walk}.depth,
-                            p.preferred_name AS ancestor_name
+                            p."{recursive}"             AS parent_id,
+                            {walk}.depth + 1            AS depth,
+                            {walk}.path || [p."H-ID"]   AS path
                         FROM {walk}
-                        JOIN {t} p ON p."H-ID" = {walk}.parent_id
-                    ),
-                    {t}_titles AS (
-                        SELECT
-                            child_id,
-                            string_agg(ancestor_name, ' > ' ORDER BY depth) AS {t}_ancestor_titles
-                        FROM {t}_ancestors
-                        GROUP BY child_id
-                    )
-                    """
-                    recursives.append(recursive_query)
-                    table_cols[t].append(f"{t}_ancestor_titles")
-                    joins.append(
-                        {"type_join": "LEFT JOIN", "table": f"{t}_titles",
-                         "on": f"ON {t}_titles.\"{selects[t]["recursive"]}\" = {t}.\"H-ID\" "}
-                    )
+                        JOIN {t} p
+                        ON p."H-ID" = {walk}.parent_id
+                        WHERE {walk}.parent_id IS NOT NULL
+                        AND NOT list_contains({walk}.path, {walk}.parent_id)
+                        ),
+                        {t}_ancestors AS (
+                            SELECT
+                                {walk}.child_id,
+                                {walk}.depth,
+                                p.preferred_name AS ancestor_name
+                            FROM {walk}
+                            JOIN {t} p ON p."H-ID" = {walk}.parent_id
+                        ),
+                        {t}_titles AS (
+                            SELECT
+                                child_id,
+                                string_agg(ancestor_name, ' > ' ORDER BY depth) AS {t}_ancestor_titles
+                            FROM {t}_ancestors
+                            GROUP BY child_id
+                        )
+                        """
+                        recursives.append(recursive_query)
+                        table_cols[t].append(f"{t}_ancestor_titles")
+                        joins.append(
+                            {"type_join": "LEFT JOIN", "table": f"{t}_titles",
+                             "on": f"ON {t}_titles.\"{recursive}\" = {t}.\"H-ID\" "}
+                        )
             query = build_selects(table_cols)
             if recursives:
                 start_recursive = "WITH RECURSIVE"
