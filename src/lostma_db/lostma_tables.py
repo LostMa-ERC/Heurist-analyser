@@ -233,6 +233,28 @@ LOSTMA_TABLES = {
         "action_required": "SELECT count(DISTINCT {table}.\"H-ID\") FROM {table} "
                            "WHERE {table}.review_status = 'Action required'"
 
-    }
-
+    },
+    "TextTable": {"normal_name": "text"},
+    "Witness": {"normal_name": "witness"},
+    "Part": {"normal_name": "part"},
+    "DocumentTable": {"normal_name": "document"},
+    "Digitization": {"normal_name": "digitization"},
+    "PhysDesc": {"normal_name": "physDesc"},
+    "Stemma": {"normal_name": "stemma"},
+    "Scripta": {"normal_name": "scripta"},
+    "Images": {"normal_name": "images"},
+    "Story": {"normal_name": "story"},
+    "Storyverse": {"normal_name": "storyverse"},
+    "Genre": {"normal_name": "genre"},
+    "Repository": {"normal_name": "repository"},
+    "Footnote": {"normal_name": "footnote"},
+    "Person": {"normal_name": "person"},
+    "Organisation": {"normal_name": "organisation"},
+    "Place": {"normal_name": "place"},
+    "Book": {"normal_name": "book"},
+    "Thesis": {"normal_name": "thesis"},
+    "HeuristJournalVolume": {"normal_name": "heurist journal volume"},
+    "Journal": {"normal_name": "journal"},
+    "JournalArticle": {"normal_name": "journal article"},
+    "PublicationSeries": {"normal_name": "publication series"}
 }
