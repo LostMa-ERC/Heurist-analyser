@@ -116,7 +116,7 @@ class LostmaDB:
             select_expr = []
             for table in cols_by_table:
                 for att in cols_by_table[table]:
-                    a = f"{table}.{att} AS {table}_{att}"
+                    a = f"{table}.{att} AS \"{table}_{att.replace("\"", "")}\""
                     select_expr.append(a)
             select_clause = ",\n    ".join(select_expr)
             select_query = f"SELECT\n    {select_clause}\nFROM {base_table} "
