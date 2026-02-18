@@ -181,9 +181,10 @@ class LostmaDB:
         if joins:
             join_tables = [j["table"] for j in (joins or [])]
             for join_table in join_tables:
-                name_table = join_table.split(" ")[0]
-                normal_name = LOSTMA_TABLES[name_table]["normal_name"]
-                self._is_table_exists(normal_name, join_table)
+                if "_titles" not in join_table:
+                    name_table = join_table.split(" ")[0]
+                    normal_name = LOSTMA_TABLES[name_table]["normal_name"]
+                    self._is_table_exists(normal_name, join_table)
             if not selects:
                 all_tables = [base_table] + join_tables
                 table_cols: dict[str, list[str]] = {}
