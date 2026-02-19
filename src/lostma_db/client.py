@@ -222,7 +222,7 @@ class LostmaDB:
         else:
             query = "SELECT * "
         if joins:
-            join_tables = [j["table"] for j in (joins or [])]
+            join_tables = [j["table"] for j in joins if "table" in j.keys()]
             for join_table in join_tables:
                 if "_titles" not in join_table:
                     name_table = join_table.split(" ")[0]
@@ -257,7 +257,7 @@ class LostmaDB:
 
     def witnesses(self, languages: list | str = None):
         """
-        Return the content of the witness table
+        Return a selection of attributes of the witness table and his linked tables
             Filter on the language_COLUMN text attribute (ex: 'dum (Middle Dutch)')
         """
         select = {"Witness": {"attributes": ["\"H-ID\"", "is_unobserved", "claim_freetext", "preferred_siglum",
@@ -296,7 +296,6 @@ class LostmaDB:
                   "Story": {"attributes": ["\"H-ID\"", "preferred_name", "peripheral"]},
                   "Storyverse": {"attributes": ["\"H-ID\"", "preferred_name"],
                                  "recursive": ["member_of_cycle H-ID"]}}
-        condition = ""
         joins = [{"type_join": "LEFT JOIN", "table": "Scripta Witness_regional_writing_style",
                   "on": "ON Witness.\"regional_writing_style H-ID\" = Witness_regional_writing_style.\"H-ID\" "},
                  {"type_join": "LEFT JOIN UNNEST(Witness.\"scribe H-ID\") AS ws(scribe_id) ON TRUE LEFT JOIN",
@@ -333,11 +332,43 @@ class LostmaDB:
                                "LEFT JOIN",
                   "table": "TextTable Text_is_derived_from", "on": "ON Text_is_derived_from.\"H-ID\" = tt.derived_id "}
                  ]
+        condition = ""
         if languages:
             if isinstance(languages, str):
                 languages = [languages]
             condition = f"WHERE TextTable.language_COLUMN IN ('{"', '".join(languages)}')"
         return self.table("Witness", condition, joins, select)
+
+    def parts(self, languages: list | str = None):
+        """
+        Return a selection of attributes of the part table and his linked tables
+            Filter on the language_COLUMN text attribute (ex: 'dum (Middle Dutch)')
+        """
+        select = {"Part": {"attributes": ["\"H-ID\"", "div_order", "page_ranges"]},
+                  "DocumentTable": {"attributes": ["\"H-ID\"", "current_shelfmark", "collection", "location_known",
+                                                   "location_notes", "collection_of_fragments", "old_shelfmark",
+                                                   "digitization_freetext"]},
+                  "digi": {"attributes": ["\"H-ID\"", "URI", "is_deprecated"]},
+                  "Repository": {"attributes": ["\"H-ID\"", "preferred_name", "label_name", "VIAF"]},
+                  "Repository_city": {"attributes": ["\"H-ID\"", "place_name", "administrative_region", "country"]}}
+        joins = [{"type_join": "LEFT JOIN", "table": "DocumentTable",
+                  "on": "ON Part.\"is_inscribed_on H-ID\" = DocumentTable.\"H-ID\" "},
+                 {"type_join": "LEFT JOIN", "table": "Repository",
+                  "on": "ON DocumentTable.\"location H-ID\" = Repository.\"H-ID\" "},
+                 {"type_join": "LEFT JOIN ("
+                               "SELECT d.*, u.doc_id "
+                               "FROM Digitization d " 
+                               "CROSS JOIN UNNEST(d.\"digitization_of H-ID\") AS u(doc_id)"
+                               ") digi ",
+                  "on": "ON DocumentTable.\"H-ID\" = digi.doc_id "},
+                 {"type_join": "LEFT JOIN", "table": "Place Repository_city",
+                  "on": "ON Repository.\"city H-ID\" = Repository_city.\"H-ID\" "}]
+        condition = "WHERE digi.is_deprecated = False"
+        if languages:
+            if isinstance(languages, str):
+                languages = [languages]
+            condition += f"AND TextTable.language_COLUMN IN ('{"', '".join(languages)}')"
+        return self.table("Part", condition, joins, select)
 
     def analyse(self, name_table: str = None,
                 language: str = None) -> dict | str:
