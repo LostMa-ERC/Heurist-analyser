@@ -358,7 +358,8 @@ class LostmaDB:
                  {"type_join": "LEFT JOIN ("
                                "SELECT d.*, u.doc_id "
                                "FROM Digitization d " 
-                               "CROSS JOIN UNNEST(d.\"digitization_of H-ID\") AS u(doc_id)"
+                               "CROSS JOIN UNNEST(d.\"digitization_of H-ID\") AS u(doc_id) "
+                               "LIMIT 1"
                                ") digitization ",
                   "on": "ON DocumentTable.\"H-ID\" = digitization.doc_id "},
                  {"type_join": "LEFT JOIN", "table": "Place Repository_city",
