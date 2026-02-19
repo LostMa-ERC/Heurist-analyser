@@ -348,7 +348,7 @@ class LostmaDB:
                   "DocumentTable": {"attributes": ["\"H-ID\"", "current_shelfmark", "collection", "location_known",
                                                    "location_notes", "collection_of_fragments", "old_shelfmark",
                                                    "digitization_freetext"]},
-                  "digi": {"attributes": ["\"H-ID\"", "URI", "is_deprecated"]},
+                  "digitization": {"attributes": ["\"H-ID\"", "URI", "is_deprecated"]},
                   "Repository": {"attributes": ["\"H-ID\"", "preferred_name", "label_name", "VIAF"]},
                   "Repository_city": {"attributes": ["\"H-ID\"", "place_name", "administrative_region", "country"]}}
         joins = [{"type_join": "LEFT JOIN", "table": "DocumentTable",
@@ -359,11 +359,11 @@ class LostmaDB:
                                "SELECT d.*, u.doc_id "
                                "FROM Digitization d " 
                                "CROSS JOIN UNNEST(d.\"digitization_of H-ID\") AS u(doc_id)"
-                               ") digi ",
-                  "on": "ON DocumentTable.\"H-ID\" = digi.doc_id "},
+                               ") digitization ",
+                  "on": "ON DocumentTable.\"H-ID\" = digitization.doc_id "},
                  {"type_join": "LEFT JOIN", "table": "Place Repository_city",
                   "on": "ON Repository.\"city H-ID\" = Repository_city.\"H-ID\" "}]
-        condition = "WHERE digi.is_deprecated = False"
+        condition = "WHERE digitization.is_deprecated = False"
         if languages:
             if isinstance(languages, str):
                 languages = [languages]
