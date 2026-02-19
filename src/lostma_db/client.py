@@ -348,7 +348,7 @@ class LostmaDB:
                   "DocumentTable": {"attributes": ["\"H-ID\"", "current_shelfmark", "collection", "location_known",
                                                    "location_notes", "collection_of_fragments", "old_shelfmark",
                                                    "digitization_freetext"]},
-                  "digitization": {"attributes": ["\"H-ID\"", "URI", "is_deprecated"]},
+                  "digitization": {"attributes": ["\"H-ID\"", "URI"]},
                   "Repository": {"attributes": ["\"H-ID\"", "preferred_name", "label_name", "VIAF"]},
                   "Repository_city": {"attributes": ["\"H-ID\"", "place_name", "administrative_region", "country"]}}
         joins = [{"type_join": "LEFT JOIN", "table": "DocumentTable",
