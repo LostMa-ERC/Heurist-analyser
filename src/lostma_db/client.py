@@ -298,43 +298,39 @@ class LostmaDB:
         condition = ""
         joins = [{"type_join": "LEFT JOIN", "table": "Scripta Witness_regional_writing_style",
                   "on": "ON Witness.\"regional_writing_style H-ID\" = Witness_regional_writing_style.\"H-ID\" "},
-                 {"type_join": "LEFT JOIN", "table": "Person Witness_scribe",
-                  "on": "ON True LEFT JOIN UNNEST(Witness.\"scribe H-ID\") AS ws "
-                        "ON ws.unnest = Witness_scribe.\"H-ID\" "},
+                 {"type_join": "LEFT JOIN UNNEST(Witness.\"scribe H-ID\") AS ws(scribe_id) ON TRUE LEFT JOIN",
+                  "table": "Person Witness_scribe", "on": "ON Witness_scribe.\"H-ID\" = ws.scribe_id "},
                  {"type_join": "LEFT JOIN", "table": "DocumentTable Witness_last_observed_in_doc",
                   "on": "ON Witness.\"last_observed_in_doc H-ID\" = Witness_last_observed_in_doc.\"H-ID\" "},
                  {"type_join": "LEFT JOIN", "table": "Place Witness_last_observed_in_doc_location",
                   "on": "ON Witness_last_observed_in_doc.\"location H-ID\" "
                         "= Witness_last_observed_in_doc_location.\"H-ID\" "},
-                 {"type_join": "LEFT JOIN", "table": "Place Witness_place_of_creation",
-                  "on": "ON True LEFT JOIN UNNEST(Witness.\"place_of_creation H-ID\") AS p "
-                        "ON p.unnest = Witness_place_of_creation.\"H-ID\" "},
+                 {"type_join": "LEFT JOIN UNNEST(Witness.\"place_of_creation H-ID\") AS p(place_id) ON TRUE LEFT JOIN",
+                  "table": "Place Witness_place_of_creation",
+                  "on": "ON Witness_place_of_creation.\"H-ID\" = p.place_id "},
                  {"type_join": "LEFT JOIN", "table": "TextTable",
                   "on": "ON Witness.\"is_manifestation_of H-ID\" = TextTable.\"H-ID\" "},
                  {"type_join": "LEFT JOIN", "table": "Genre",
                   "on": "ON TextTable.\"specific_genre H-ID\" = Genre.\"H-ID\" "},
-                 {"type_join": "LEFT JOIN", "table": "Story",
-                  "on": "ON True LEFT JOIN UNNEST(TextTable.\"is_expression_of H-ID\") AS s "
-                        "ON s.unnest = Story.\"H-ID\" "},
-                 {"type_join": "LEFT JOIN", "table": "Storyverse",
-                  "on": "ON True LEFT JOIN UNNEST(Story.\"is_part_of_storyverse H-ID\") AS sv "
-                        "ON sv.unnest = Storyverse.\"H-ID\" "},
+                 {"type_join": "LEFT JOIN UNNEST(TextTable.\"is_expression_of H-ID\") AS s(story_id) ON TRUE LEFT JOIN",
+                  "table": "Story", "on": "ON Story.\"H-ID\" = s.story_id "},
+                 {"type_join": "LEFT JOIN UNNEST(Story.\"is_part_of_storyverse H-ID\") AS sv(storyverse_id) "
+                               "ON TRUE LEFT JOIN",
+                  "table": "Storyverse", "on": "ON Storyverse.\"H-ID\" = sv.storyverse_id "},
                  {"type_join": "LEFT JOIN", "table": "Scripta Text_regional_writing_style",
                   "on": "ON TextTable.\"regional_writing_style H-ID\" = Text_regional_writing_style.\"H-ID\" "},
-                 {"type_join": "LEFT JOIN", "table": "Person Text_is_written_by",
-                  "on": "ON True LEFT JOIN UNNEST(TextTable.\"is_written_by H-ID\") AS tw "
-                        "ON tw.unnest = Text_is_written_by.\"H-ID\" "},
-                 {"type_join": "LEFT JOIN", "table": "Person Text_is_adapted_by",
-                  "on": "ON True LEFT JOIN UNNEST(TextTable.\"is_adapted_by H-ID\") AS t "
-                        "ON t.unnest = Text_is_adapted_by.\"H-ID\" "},
+                 {"type_join": "LEFT JOIN UNNEST(TextTable.\"is_written_by H-ID\") AS tw(author_id) ON TRUE LEFT JOIN",
+                  "table": "Person Text_is_written_by", "on": "ON Text_is_written_by.\"H-ID\" = tw.author_id "},
+                 {"type_join": "LEFT JOIN UNNEST(TextTable.\"is_adapted_by H-ID\") AS t(adaptator_id) ON TRUE "
+                               "LEFT JOIN",
+                  "table": "Person Text_is_adapted_by", "on": "ON Text_is_adapted_by.\"H-ID\" = t.adaptator_id "},
                  {"type_join": "LEFT JOIN", "table": "Place Text_place_of_creation",
                   "on": "ON TextTable.\"place_of_creation H-ID\" = Text_place_of_creation.\"H-ID\" "},
-                 {"type_join": "LEFT JOIN", "table": "Stemma",
-                  "on": "ON True LEFT JOIN UNNEST(TextTable.\"in_stemma H-ID\") AS st "
-                        "ON st.unnest = Stemma.\"H-ID\" "},
-                 {"type_join": "LEFT JOIN", "table": "TextTable Text_is_derived_from",
-                  "on": "ON True LEFT JOIN UNNEST(TextTable.\"is_derived_from H-ID\") AS tt "
-                        "ON tt.unnest = Text_is_derived_from.\"H-ID\" "}
+                 {"type_join": "LEFT JOIN UNNEST(TextTable.\"in_stemma H-ID\") AS st(stemma_id) ON TRUE LEFT JOIN",
+                  "table": "Stemma", "on": "ON Stemma.\"H-ID\" = st.stemma_id "},
+                 {"type_join": "LEFT JOIN UNNEST(TextTable.\"is_derived_from H-ID\") AS tt(derived_id) ON TRUE "
+                               "LEFT JOIN",
+                  "table": "TextTable Text_is_derived_from", "on": "ON Text_is_derived_from.\"H-ID\" = tt.derived_id "}
                  ]
         if languages:
             if isinstance(languages, str):
