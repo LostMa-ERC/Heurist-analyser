@@ -241,7 +241,6 @@ class LostmaDB:
             query += f"FROM {base_table} "
         if condition:
             query += condition
-        print(query)
         return self.sql(query)
 
     def texts(self, languages: list | str = None):
