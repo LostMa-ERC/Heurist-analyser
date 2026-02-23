@@ -124,24 +124,23 @@ class LostmaDB:
             Filter on a condition and add joins if there are any
         """
 
-        def build_selects(cols_by_table):
+        def build_selects(ordered_columns):
             """Build the select part of the query from a dictionary
             of attributes ordered by table"""
             select_expr = []
-            for table in cols_by_table:
-                for att in cols_by_table[table]:
-                    a = f"{table}.{att} AS \"{table}_{att.replace("\"", "")}\""
+            for table in ordered_columns:
+                name = ordered_columns[table]["name_table"]
+                for att in ordered_columns[table]["attributes"]:
+                    a = f"{name}.{att} AS \"{name}_{att.replace("\"", "")}\""
                     select_expr.append(a)
             select_clause = ",\n    ".join(select_expr)
             select_query = f"SELECT\n    {select_clause}\nFROM {base_table} "
             return select_query
 
         if selects:
-            table_cols: dict[str, list[str]] = {}
             recursives = []
             for t in selects:
                 name_table = selects[t]["name_table"]
-                table_cols[name_table] = selects[t]["attributes"]
                 if "recursive" in selects[t].keys():
                     for recursive in selects[t]["recursive"]:
                         walk = name_table + "_walk"
@@ -211,12 +210,14 @@ class LostmaDB:
     GROUP BY child_id
     )"""
                         recursives.append(recursive_query)
-                        table_cols[f"{name_table}_titles"] = [f"{name_table}_ancestor_titles"]
+                        selects[max([x for x in selects.keys()]) + 1] = {"name_table": f"{name_table}_titles",
+                                                                         "attributes": [f"{name_table}_ancestor_titles"]
+                                                                         }
                         joins.append(
                             {"type_join": "LEFT JOIN", "table": f"{name_table}_titles",
                              "on": f"ON {name_table}_titles.child_id = {name_table}.\"H-ID\" "}
                         )
-            query = build_selects(table_cols)
+            query = build_selects(selects)
             if recursives:
                 start_recursive = "WITH RECURSIVE"
                 query = start_recursive + "\n    " + ",\n    ".join(recursives) + "\n    " + query
@@ -231,9 +232,12 @@ class LostmaDB:
                     self._is_table_exists(normal_name, name_table)
             if not selects:
                 all_tables = [base_table] + join_tables
-                table_cols: dict[str, list[str]] = {}
+                table_cols: dict[int, dict] = {}
+                num = 0
                 for t in all_tables:
-                    table_cols[t] = self._get_columns(t)
+                    num += 1
+                    table_cols[num] = {"name_table": t,
+                                       "attributes": self._get_columns(t)}
                 query = build_selects(table_cols)
             for join in joins:
                 query += "\n    "
