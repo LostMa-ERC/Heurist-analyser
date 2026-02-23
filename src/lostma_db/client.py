@@ -1,7 +1,7 @@
 import duckdb
 import pandas as pd
 from pathlib import Path
-from .general import def_requirements, normalize_heurist_date
+from .general import def_requirements, normalize_heurist_date, drop_too_empty_columns
 from .lostma_tables import LOSTMA_TABLES
 from .tei_depot import TeiDepotClient
 from heurist.api.connection import HeuristAPIConnection
@@ -358,7 +358,7 @@ class LostmaDB:
         for col in result.columns:
             if result[col].apply(lambda x: isinstance(x, dict)).any():
                 result[col] = result[col].apply(normalize_heurist_date)
-        return result
+        return result.apply(drop_too_empty_columns)
 
     def parts(self, languages: list | str = None):
         """
@@ -396,7 +396,7 @@ class LostmaDB:
         for col in result.columns:
             if result[col].apply(lambda x: isinstance(x, dict)).any():
                 result[col] = result[col].apply(normalize_heurist_date)
-        return result
+        return result.apply(drop_too_empty_columns)
 
     def analyse(self, name_table: str = None,
                 language: str = None) -> dict | str:

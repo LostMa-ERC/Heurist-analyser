@@ -2,6 +2,8 @@ from pathlib import Path
 import ast
 import csv
 import duckdb
+import pandas as pd
+from pandas import DataFrame
 
 KEYWORDS = [t[0] for t in duckdb.sql("select * from duckdb_keywords()").fetchall()]
 REQ_TYPES = ["optional", "recommended", "required", "hidden"]
@@ -15,16 +17,27 @@ def normalize_heurist_date(d):
     if not isinstance(d, dict):
         return None
     if d.get("value") is not None:
-        return f"{d["value"].date()}"
+        return f"{d["value"].year}"
     min_date = d.get("estMinDate")
     max_date = d.get("estMaxDate")
     if min_date and max_date:
-        return f"{min_date.date()} - {max_date.date()}"
+        return f"{min_date.year} - {max_date.year}"
     elif min_date:
-        return f"after {min_date.date()}"
+        return f"after {min_date.year}"
     elif max_date:
-        return f"before {max_date.date()}"
+        return f"before {max_date.year}"
     return None
+
+
+def drop_too_empty_columns(df: DataFrame):
+    threshold = 0.10
+    non_null_frac = df.notna().mean()
+    dropped_cols = non_null_frac[non_null_frac < threshold].index.tolist()
+    kept_cols = non_null_frac[non_null_frac >= threshold].index.tolist()
+    print(f"Dropping {len(dropped_cols)} columns with < {int(threshold * 100)}% filled values:")
+    for c in dropped_cols:
+        print(f"  - {c} ({non_null_frac[c] * 100:.2f}%)")
+    return df[kept_cols]
 
 
 def def_requirements(
