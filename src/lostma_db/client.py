@@ -396,7 +396,7 @@ class LostmaDB:
         for col in result.columns:
             if result[col].apply(lambda x: isinstance(x, dict)).any():
                 result[col] = result[col].apply(normalize_heurist_date)
-        return result.apply(drop_too_empty_columns)
+        return drop_too_empty_columns(result)
 
     def analyse(self, name_table: str = None,
                 language: str = None) -> dict | str:
