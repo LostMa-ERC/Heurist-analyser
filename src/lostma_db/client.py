@@ -118,7 +118,7 @@ class LostmaDB:
               base_table: str,
               condition: str = None ,
               joins: list[dict] = None,
-              selects: dict[str, dict] = None):
+              selects: dict[int, dict] = None):
         """
         Return the content of a table
             Filter on a condition and add joins if there are any
@@ -140,18 +140,19 @@ class LostmaDB:
             table_cols: dict[str, list[str]] = {}
             recursives = []
             for t in selects:
-                table_cols[t] = selects[t]["attributes"]
+                name_table = selects[t]["name_table"]
+                table_cols[name_table] = selects[t]["attributes"]
                 if "recursive" in selects[t].keys():
                     for recursive in selects[t]["recursive"]:
-                        walk = t + "_walk"
-                        if self._is_list(t, recursive):
+                        walk = name_table + "_walk"
+                        if self._is_list(name_table, recursive):
                             start = f"""{walk} AS (
     SELECT
         c."H-ID"          AS child_id,
         u.parent_id       AS parent_id,
         1                 AS depth,
         [c."H-ID"]        AS path
-    FROM {t} c
+    FROM {name_table} c
     CROSS JOIN UNNEST(c."{recursive}") AS u(parent_id)
 
     UNION ALL
@@ -162,7 +163,7 @@ class LostmaDB:
         {walk}.depth + 1            AS depth,
         {walk}.path || [p."H-ID"]   AS path
     FROM {walk}
-    JOIN {t} p
+    JOIN {name_table} p
     ON p."H-ID" = {walk}.parent_id
     CROSS JOIN UNNEST(p."{recursive}") AS u2(parent_id)
     WHERE {walk}.parent_id IS NOT NULL
@@ -177,7 +178,7 @@ class LostmaDB:
         c."{recursive}"   AS parent_id,
         1                 AS depth,
         [c."H-ID"]        AS path
-    FROM {t} c
+    FROM {name_table} c
 
     UNION ALL
 
@@ -187,33 +188,33 @@ class LostmaDB:
          {walk}.depth + 1            AS depth,
          {walk}.path || [p."H-ID"]   AS path
     FROM {walk}
-    JOIN {t} p
+    JOIN {name_table} p
     ON p."H-ID" = {walk}.parent_id
     WHERE {walk}.parent_id IS NOT NULL
          AND NOT list_contains({walk}.path, {walk}.parent_id)
     ),
     """
-                        recursive_query = start + f"""{t}_ancestors AS (
+                        recursive_query = start + f"""{name_table}_ancestors AS (
     SELECT
         {walk}.child_id,
         {walk}.depth,
         p.preferred_name AS ancestor_name
     FROM {walk}
-    JOIN {t} p ON p."H-ID" = {walk}.parent_id
+    JOIN {name_table} p ON p."H-ID" = {walk}.parent_id
     ),
-    {t}_titles AS (
+    {name_table}_titles AS (
     SELECT
          child_id,
          string_agg(ancestor_name, ' > ' ORDER BY depth) 
-         AS {t}_ancestor_titles
-    FROM {t}_ancestors
+         AS {name_table}_ancestor_titles
+    FROM {name_table}_ancestors
     GROUP BY child_id
     )"""
                         recursives.append(recursive_query)
-                        table_cols[f"{t}_titles"] = [f"{t}_ancestor_titles"]
+                        table_cols[f"{name_table}_titles"] = [f"{name_table}_ancestor_titles"]
                         joins.append(
-                            {"type_join": "LEFT JOIN", "table": f"{t}_titles",
-                             "on": f"ON {t}_titles.child_id = {t}.\"H-ID\" "}
+                            {"type_join": "LEFT JOIN", "table": f"{name_table}_titles",
+                             "on": f"ON {name_table}_titles.child_id = {name_table}.\"H-ID\" "}
                         )
             query = build_selects(table_cols)
             if recursives:
@@ -260,42 +261,53 @@ class LostmaDB:
         Return a selection of attributes of the witness table and his linked tables
             Filter on the language_COLUMN text attribute (ex: 'dum (Middle Dutch)')
         """
-        select = {"Witness": {"attributes": ["\"H-ID\"", "is_unobserved", "claim_freetext", "preferred_siglum",
-                                             "alternative_sigla", "status_witness", "status_notes", "is_excerpt",
-                                             "scripta_freetext", "date_of_creation", "date_of_creation_certainty",
-                                             "date_of_creation_source", "date_freetext", "number_of_hands",
-                                             "scribe_note", "place_of_creation_source", "\"observed_on_pages H-ID\""]},
-                  "Witness_last_observed_in_doc": {"attributes": ["\"H-ID\"", "collection", "current_shelfmark",
-                                                                  "invented_label"]},
-                  "Witness_regional_writing_style": {"attributes": ["\"H-ID\"", "preferred_name", "language_COLUMN"]},
-                  "Witness_scribe": {"attributes": ["\"H-ID\"", "given_names", "family_name", "floruit",
-                                                    "date_of_birth", "date_of_death"]},
-                  "Witness_place_of_creation": {"attributes": ["\"H-ID\"", "place_name", "administrative_region",
-                                                               "country"]},
-                  "Witness_last_observed_in_doc_location": {"attributes": ["\"H-ID\"", "place_name",
-                                                                           "administrative_region", "country"]},
-                  "TextTable": {"attributes": ["\"H-ID\"", "preferred_name", "language_COLUMN", "literary_form",
-                                               "is_hypothetical", "claim_freetext", "length", "length_freetext",
-                                               "verse_type", "rhyme_type", "stanza_type", "nature_of_derivations",
-                                               "tradition_status", "status_notes", "scripta_freetext",
-                                               "date_of_creation", "date_of_creation_certainty",
-                                               "date_of_creation_source", "date_freetext", "author_freetext",
-                                               "place_of_creation_source", "\"is_derived_from H-ID\""]},
-                  "Text_is_derived_from": {"attributes": ["\"H-ID\"", "preferred_name"]},
-                  "Text_regional_writing_style": {"attributes": ["\"H-ID\"", "preferred_name", "language_COLUMN"]},
-
-                  "Text_is_written_by": {"attributes": ["\"H-ID\"", "given_names", "family_name", "floruit", "date_of_birth",
-                                                 "date_of_death"]},
-                  "Text_is_adapted_by": {"attributes": ["\"H-ID\"", "given_names", "family_name", "floruit",
-                                                    "date_of_birth", "date_of_death"]},
-                  "Text_place_of_creation": {"attributes": ["\"H-ID\"", "place_name", "administrative_region",
-                                                            "country"]},
-                  "Stemma": {"attributes": ["\"H-ID\"", "\"openstemmata id\""]},
-                  "Genre": {"attributes": ["\"H-ID\"", "preferred_name"],
-                            "recursive": ["parent_genre H-ID"]},
-                  "Story": {"attributes": ["\"H-ID\"", "preferred_name", "peripheral"]},
-                  "Storyverse": {"attributes": ["\"H-ID\"", "preferred_name"],
-                                 "recursive": ["member_of_cycle H-ID"]}}
+        select = {1: {"name_table": "Witness", "attributes": ["\"H-ID\"", "\"observed_on_pages H-ID\""]},
+                  2: {"name_table": "Witness_last_observed_in_doc", "attributes": ["\"H-ID\"", "collection",
+                                                                                   "current_shelfmark",
+                                                                                   "invented_label"]},
+                  3: {"name_table": "Witness_last_observed_in_doc_location", "attributes": ["\"H-ID\"", "place_name",
+                                                                                            "administrative_region",
+                                                                                            "country"]},
+                  4: {"name_table": "Witness", "attributes": ["is_unobserved", "claim_freetext", "preferred_siglum",
+                                                              "alternative_sigla", "status_witness", "status_notes",
+                                                              "is_excerpt"]},
+                  5: {"name_table": "Witness_regional_writing_style", "attributes": ["\"H-ID\"", "preferred_name",
+                                                                                     "language_COLUMN"]},
+                  6: {"name_table": "Witness", "attributes": ["scripta_freetext", "date_of_creation",
+                                                              "date_of_creation_certainty", "date_of_creation_source",
+                                                              "date_freetext"]},
+                  7: {"name_table": "Witness_scribe", "attributes": ["\"H-ID\"", "given_names", "family_name",
+                                                                     "floruit", "date_of_birth", "date_of_death"]},
+                  8: {"name_table": "Witness", "attributes": ["number_of_hands", "scribe_note"]},
+                  9: {"name_table": "Witness_place_of_creation", "attributes": ["\"H-ID\"", "place_name",
+                                                                                "administrative_region", "country"]},
+                  10: {"name_table": "Witness", "attributes": ["place_of_creation_source"]},
+                  11: {"name_table": "TextTable", "attributes": ["\"H-ID\"", "preferred_name", "language_COLUMN",
+                                                                "literary_form", "is_hypothetical", "claim_freetext",
+                                                                "length", "length_freetext", "verse_type", "rhyme_type",
+                                                                "stanza_type"]},
+                  12: {"name_table": "Text_is_derived_from", "attributes": ["\"H-ID\"", "preferred_name"]},
+                  13: {"name_table": "TextTable", "attributes": ["nature_of_derivations", "tradition_status",
+                                                                 "status_notes"]},
+                  14: {"name_table": "Stemma", "attributes": ["\"H-ID\"", "\"openstemmata id\""]},
+                  15: {"name_table": "Text_regional_writing_style", "attributes": ["\"H-ID\"", "preferred_name",
+                                                                                  "language_COLUMN"]},
+                  16: {"name_table": "TextTable", "attributes": ["scripta_freetext", "date_of_creation",
+                                                                 "date_of_creation_certainty",
+                                                                 "date_of_creation_source", "date_freetext"]},
+                  17: {"name_table": "Text_is_written_by", "attributes": ["\"H-ID\"", "given_names", "family_name",
+                                                                          "floruit", "date_of_birth", "date_of_death"]},
+                  18: {"name_table": "Text_is_adapted_by", "attributes": ["\"H-ID\"", "given_names", "family_name",
+                                                                          "floruit", "date_of_birth", "date_of_death"]},
+                  19: {"name_table": "TextTable", "attributes": ["author_freetext"]},
+                  20: {"name_table": "Text_place_of_creation", "attributes": ["\"H-ID\"", "place_name",
+                                                                              "administrative_region", "country"]},
+                  21: {"name_table": "TextTable", "attributes": ["place_of_creation_source"]},
+                  22: {"name_table": "Genre", "attributes": ["\"H-ID\"", "preferred_name"],
+                       "recursive": ["parent_genre H-ID"]},
+                  23: {"name_table": "Story", "attributes": ["\"H-ID\"", "preferred_name", "peripheral"]},
+                  24: {"name_table": "Storyverse", "attributes": ["\"H-ID\"", "preferred_name"],
+                       "recursive": ["member_of_cycle H-ID"]}}
         joins = [{"type_join": "LEFT JOIN", "table": "Scripta Witness_regional_writing_style",
                   "on": "ON Witness.\"regional_writing_style H-ID\" = Witness_regional_writing_style.\"H-ID\" "},
                  {"type_join": "LEFT JOIN UNNEST(Witness.\"scribe H-ID\") AS ws(scribe_id) ON TRUE LEFT JOIN",
@@ -344,13 +356,15 @@ class LostmaDB:
         Return a selection of attributes of the part table and his linked tables
             Filter on the language_COLUMN text attribute (ex: 'dum (Middle Dutch)')
         """
-        select = {"Part": {"attributes": ["\"H-ID\"", "div_order", "page_ranges"]},
-                  "DocumentTable": {"attributes": ["\"H-ID\"", "current_shelfmark", "collection", "location_known",
-                                                   "location_notes", "collection_of_fragments", "old_shelfmark",
-                                                   "digitization_freetext"]},
-                  "digitization": {"attributes": ["\"H-ID\"", "URI"]},
-                  "Repository": {"attributes": ["\"H-ID\"", "preferred_name", "label_name", "VIAF"]},
-                  "Repository_city": {"attributes": ["\"H-ID\"", "place_name", "administrative_region", "country"]}}
+        select = {1: {"name_table": "Part", "attributes": ["\"H-ID\"", "div_order", "page_ranges"]},
+                  2: {"name_table": "DocumentTable", "attributes": ["\"H-ID\"", "current_shelfmark", "collection",
+                                                                    "location_known", "location_notes",
+                                                                    "collection_of_fragments", "old_shelfmark",
+                                                                    "digitization_freetext"]},
+                  3: {"name_table": "Digitization", "attributes": ["\"H-ID\"", "URI"]},
+                  4: {"name_table": "Repository", "attributes": ["\"H-ID\"", "preferred_name", "label_name", "VIAF"]},
+                  5: {"name_table": "Repository_city", "attributes": ["\"H-ID\"", "place_name",
+                                                                      "administrative_region", "country"]}}
         joins = [{"type_join": "LEFT JOIN", "table": "DocumentTable",
                   "on": "ON Part.\"is_inscribed_on H-ID\" = DocumentTable.\"H-ID\" "},
                  {"type_join": "LEFT JOIN", "table": "Repository",
@@ -360,7 +374,7 @@ class LostmaDB:
                                "FROM Digitization d " 
                                "CROSS JOIN UNNEST(d.\"digitization_of H-ID\") AS u(doc_id) "
                                "LIMIT 1"
-                               ") digitization ",
+                               ") Digitization ",
                   "on": "ON DocumentTable.\"H-ID\" = digitization.doc_id "},
                  {"type_join": "LEFT JOIN", "table": "Place Repository_city",
                   "on": "ON Repository.\"city H-ID\" = Repository_city.\"H-ID\" "}]
