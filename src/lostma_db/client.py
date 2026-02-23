@@ -358,7 +358,7 @@ class LostmaDB:
         for col in result.columns:
             if result[col].apply(lambda x: isinstance(x, dict)).any():
                 result[col] = result[col].apply(normalize_heurist_date)
-        return result.apply(drop_too_empty_columns)
+        return drop_too_empty_columns(result)
 
     def parts(self, languages: list | str = None):
         """
@@ -382,16 +382,20 @@ class LostmaDB:
                                "SELECT d.*, u.doc_id "
                                "FROM Digitization d " 
                                "CROSS JOIN UNNEST(d.\"digitization_of H-ID\") AS u(doc_id) "
-                               "LIMIT 1"
+                               "WHERE d.is_deprecated = FALSE "
+                               "QUALIFY row_number() OVER ("
+                                    "PARTITION BY u.doc_id  "
+                                    "ORDER BY d.\"H-ID\" ASC"
+                                    ") = 1 "
                                ") Digitization ",
                   "on": "ON DocumentTable.\"H-ID\" = digitization.doc_id "},
                  {"type_join": "LEFT JOIN", "table": "Place Repository_city",
                   "on": "ON Repository.\"city H-ID\" = Repository_city.\"H-ID\" "}]
-        condition = "WHERE digitization.is_deprecated = False"
+        condition = ""
         if languages:
             if isinstance(languages, str):
                 languages = [languages]
-            condition += f"AND TextTable.language_COLUMN IN ('{"', '".join(languages)}')"
+            condition += f"WHERE TextTable.language_COLUMN IN ('{"', '".join(languages)}')"
         result = self.table("Part", condition, joins, select)
         for col in result.columns:
             if result[col].apply(lambda x: isinstance(x, dict)).any():

@@ -2,7 +2,6 @@ from pathlib import Path
 import ast
 import csv
 import duckdb
-import pandas as pd
 from pandas import DataFrame
 
 KEYWORDS = [t[0] for t in duckdb.sql("select * from duckdb_keywords()").fetchall()]
