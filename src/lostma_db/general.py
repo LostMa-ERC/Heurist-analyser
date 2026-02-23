@@ -10,6 +10,23 @@ REQ_TYPES = ["optional", "recommended", "required", "hidden"]
 Here is a first version, ready for use, for a Heurist schema reader
 """
 
+
+def normalize_heurist_date(d):
+    if not isinstance(d, dict):
+        return None
+    if d.get("value") is not None:
+        return f"{d["value"].date()}"
+    min_date = d.get("estMinDate")
+    max_date = d.get("estMaxDate")
+    if min_date and max_date:
+        return f"{min_date.date()} - {max_date.date()}"
+    elif min_date:
+        return f"after {min_date.date()}"
+    elif max_date:
+        return f"before {max_date.date()}"
+    return None
+
+
 def def_requirements(
         path: Path | str,
         req_types: list[str] | str = None

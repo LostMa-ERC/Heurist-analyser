@@ -1,7 +1,7 @@
 import duckdb
 import pandas as pd
 from pathlib import Path
-from .general import def_requirements
+from .general import def_requirements, normalize_heurist_date
 from .lostma_tables import LOSTMA_TABLES
 from .tei_depot import TeiDepotClient
 from heurist.api.connection import HeuristAPIConnection
@@ -354,7 +354,11 @@ class LostmaDB:
             if isinstance(languages, str):
                 languages = [languages]
             condition = f"WHERE TextTable.language_COLUMN IN ('{"', '".join(languages)}')"
-        return self.table("Witness", condition, joins, select)
+        result = self.table("Witness", condition, joins, select)
+        for col in result.columns:
+            if result[col].apply(lambda x: isinstance(x, dict)).any():
+                result[col] = result[col].apply(normalize_heurist_date)
+        return result
 
     def parts(self, languages: list | str = None):
         """
@@ -388,7 +392,11 @@ class LostmaDB:
             if isinstance(languages, str):
                 languages = [languages]
             condition += f"AND TextTable.language_COLUMN IN ('{"', '".join(languages)}')"
-        return self.table("Part", condition, joins, select)
+        result = self.table("Part", condition, joins, select)
+        for col in result.columns:
+            if result[col].apply(lambda x: isinstance(x, dict)).any():
+                result[col] = result[col].apply(normalize_heurist_date)
+        return result
 
     def analyse(self, name_table: str = None,
                 language: str = None) -> dict | str:
