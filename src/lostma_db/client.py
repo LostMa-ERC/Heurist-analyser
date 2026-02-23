@@ -138,7 +138,7 @@ class LostmaDB:
             return select_query
 
         if selects:
-            recursives = []
+            recursives, new_selects = [], []
             for t in selects:
                 name_table = selects[t]["name_table"]
                 if "recursive" in selects[t].keys():
@@ -210,14 +210,15 @@ class LostmaDB:
     GROUP BY child_id
     )"""
                         recursives.append(recursive_query)
-                        selects[max([x for x in selects.keys()]) + 1] = {"name_table": f"{name_table}_titles",
-                                                                         "attributes": [f"{name_table}_ancestor_titles"]
-                                                                         }
+                        new_selects.append({"name_table": f"{name_table}_titles",
+                                            "attributes": [f"{name_table}_ancestor_titles"]})
                         joins.append(
                             {"type_join": "LEFT JOIN", "table": f"{name_table}_titles",
                              "on": f"ON {name_table}_titles.child_id = {name_table}.\"H-ID\" "}
                         )
             query = build_selects(selects)
+            for new_select in new_selects:
+                selects[max([x for x in selects.keys()]) + 1] = new_select
             if recursives:
                 start_recursive = "WITH RECURSIVE"
                 query = start_recursive + "\n    " + ",\n    ".join(recursives) + "\n    " + query
