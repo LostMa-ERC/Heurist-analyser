@@ -41,6 +41,7 @@ def drop_too_empty_columns(df: DataFrame, threshold: float = 0.10) -> DataFrame:
     """
     A function to drop too empty columns from a dataframe
     """
+    df = DataFrame(df)
     df = empty_lists_to_na(df)
     non_null_frac = df.notna().mean()
     dropped_cols = non_null_frac[non_null_frac < threshold].index.tolist()
