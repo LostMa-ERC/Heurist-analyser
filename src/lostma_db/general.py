@@ -2,7 +2,7 @@ from pathlib import Path
 import ast
 import csv
 import duckdb
-from pandas import DataFrame
+from pandas import DataFrame, NA
 
 KEYWORDS = [t[0] for t in duckdb.sql("select * from duckdb_keywords()").fetchall()]
 REQ_TYPES = ["optional", "recommended", "required", "hidden"]
@@ -28,7 +28,20 @@ def normalize_heurist_date(d):
     return None
 
 
-def drop_too_empty_columns(df: DataFrame, threshold: float = 0.10):
+def empty_lists_to_na(df: DataFrame) -> DataFrame:
+    """
+    A function to change empty lists to NaN
+    """
+    def fix_cell(x):
+        return NA if isinstance(x, list) and len(x) == 0 else x
+    return df.applymap(fix_cell)
+
+
+def drop_too_empty_columns(df: DataFrame, threshold: float = 0.10) -> DataFrame:
+    """
+    A function to drop too empty columns from a dataframe
+    """
+    df = empty_lists_to_na(df)
     non_null_frac = df.notna().mean()
     dropped_cols = non_null_frac[non_null_frac < threshold].index.tolist()
     kept_cols = non_null_frac[non_null_frac >= threshold].index.tolist()
