@@ -390,7 +390,8 @@ class LostmaDB:
                                                                     "collection_of_fragments", "old_shelfmark",
                                                                     "digitization_freetext"]},
                   3: {"name_table": "Digitization", "attributes": ["\"H-ID\"", "URI"]},
-                  4: {"name_table": "Repository", "attributes": ["\"H-ID\"", "preferred_name", "label_name", "VIAF"]}}
+                  4: {"name_table": "Repository", "attributes": ["\"H-ID\"", "preferred_name", "label_name", "VIAF",
+                                                                 "\"city H-ID\""]}}
         joins = [{"type_join": "LEFT JOIN", "table": "DocumentTable",
                   "on": "ON Part.\"is_inscribed_on H-ID\" = DocumentTable.\"H-ID\" "},
                  {"type_join": "LEFT JOIN", "table": "Repository",
@@ -405,7 +406,20 @@ class LostmaDB:
                                     "ORDER BY d.\"H-ID\" ASC"
                                     ") = 1 "
                                ") Digitization ",
-                  "on": "ON DocumentTable.\"H-ID\" = digitization.doc_id "}]
+                  "on": "ON DocumentTable.\"H-ID\" = Digitization.doc_id "},
+                 {"type_join": "LEFT JOIN ("
+                               "SELECT w.*, p.part_id "
+                               "FROM Witness w "
+                               "CROSS JOIN UNNEST(w.\"observed_on_pages H-ID\") AS p(part_id) "
+                               "QUALIFY row_number() OVER ("
+                               "PARTITION BY p.part_id  "
+                               "ORDER BY w.\"H-ID\" ASC"
+                               ") = 1 "
+                               ") Witness ",
+                  "on": "ON Part.\"H-ID\" = Witness.part_id "},
+                 {"type_join": "LEFT JOIN", "table": "TextTable",
+                  "on": "ON Witness.\"is_manifestation_of H-ID\" = TextTable.\"H-ID\" "}
+                 ]
         condition = ""
         if languages:
             if isinstance(languages, str):
