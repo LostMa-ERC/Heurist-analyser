@@ -1,13 +1,17 @@
 import duckdb
 import pandas as pd
 from pathlib import Path
-from .general import def_requirements, normalize_heurist_date, drop_too_empty_columns
+
+from duckdb.experimental.spark import DataFrame
+
+from .general import def_requirements, normalize_heurist_date, too_empty_columns, concat_attributes
 from .lostma_tables import LOSTMA_TABLES
 from .tei_depot import TeiDepotClient
 from heurist.api.connection import HeuristAPIConnection
 from heurist.workflows.etl import extract_transform_load
 from heurist.schema import export_schema
 from heurist.utils.constants import DEFAULT_RECORD_GROUPS
+from numpy import ndarray
 
 
 class LostmaDB:
@@ -90,6 +94,39 @@ class LostmaDB:
             type_table = LOSTMA_TABLES[table_name]["type"]
             print(f"Table {table_name} is not yet available. Downloading...")
             self.sync(type_table)
+
+    def _solving_references(self, data: DataFrame, references: dict) -> DataFrame:
+        """
+        Solving the multiple references with the name of the corresponding entity
+        """
+        for table in references:
+            id_joined_table = table + "_H-ID"
+            table_attributes = "attributes"
+            solving_select = {1: {"name_table": table, "attributes": references[table]["attributes"]}}
+            solving = self.table(table, selects=solving_select)
+            for col in solving.columns:
+                if solving[col].apply(lambda x: isinstance(x, dict)).any():
+                    solving[col] = solving[col].apply(normalize_heurist_date)
+            solving = concat_attributes(solving, id_joined_table, table_attributes)
+            for join in references[table]["name_joins"]:
+                name_table_attributes = join.replace("H-ID", "") + "Name"
+                solving = solving.rename(columns={solving.columns[-1]: name_table_attributes})
+                id_to_name = solving.set_index(id_joined_table)[name_table_attributes].to_dict()
+
+                def ids_to_names(x, multiple_value: bool):
+                    if multiple_value:
+                        if not isinstance(x, (list, ndarray)) or len(x) == 0:
+                            return pd.NA
+                        return [id_to_name.get(hid) for hid in x]
+                    else:
+                        return id_to_name.get(x)
+
+                table_name, attribute_name = join.split("_", 1)
+                is_list = self._is_list(table_name, attribute_name)
+                names_series = data[join].apply(ids_to_names, multiple_value=is_list)
+                pos = data.columns.get_loc(join) + 1
+                data.insert(pos, name_table_attributes, names_series)
+        return data
 
     def sync(self, type_table: str = None) -> None:
         """
@@ -201,24 +238,24 @@ class LostmaDB:
     FROM {walk}
     JOIN {name_table} p ON p."H-ID" = {walk}.parent_id
     ),
-    {name_table}_titles AS (
+    {name_table}_parents AS (
     SELECT
          child_id,
          string_agg(ancestor_name, ' > ' ORDER BY depth) 
-         AS {name_table}_ancestor_titles
+         AS titles
     FROM {name_table}_ancestors
     GROUP BY child_id
     )"""
                         recursives.append(recursive_query)
-                        new_selects.append({"name_table": f"{name_table}_titles",
-                                            "attributes": [f"{name_table}_ancestor_titles"]})
+                        new_selects.append({"name_table": f"{name_table}_parents",
+                                            "attributes": [f"titles"]})
                         joins.append(
-                            {"type_join": "LEFT JOIN", "table": f"{name_table}_titles",
-                             "on": f"ON {name_table}_titles.child_id = {name_table}.\"H-ID\" "}
+                            {"type_join": "LEFT JOIN", "table": f"{name_table}_parents",
+                             "on": f"ON {name_table}_parents.child_id = {name_table}.\"H-ID\" "}
                         )
-            query = build_selects(selects)
             for new_select in new_selects:
                 selects[max([x for x in selects.keys()]) + 1] = new_select
+            query = build_selects(selects)
             if recursives:
                 start_recursive = "WITH RECURSIVE"
                 query = start_recursive + "\n    " + ",\n    ".join(recursives) + "\n    " + query
@@ -227,7 +264,7 @@ class LostmaDB:
         if joins:
             join_tables = [j["table"] for j in joins if "table" in j.keys()]
             for join_table in join_tables:
-                if "_titles" not in join_table:
+                if "_parents" not in join_table:
                     name_table = join_table.split(" ")[0]
                     normal_name = LOSTMA_TABLES[name_table]["normal_name"]
                     self._is_table_exists(normal_name, name_table)
@@ -244,7 +281,8 @@ class LostmaDB:
                 query += "\n    "
                 query += " ".join(join.values())
         else:
-            query += f"FROM {base_table} "
+            if not selects:
+                query += f"FROM {base_table} "
         if condition:
             query += condition
         return self.sql(query)
@@ -261,7 +299,8 @@ class LostmaDB:
             return self.table("TextTable", condition)
         return self.table("TextTable")
 
-    def witnesses(self, languages: list | str = None):
+    def witnesses(self, languages: list | str = None,
+                  drop_empty_columns: bool = True):
         """
         Return a selection of attributes of the witness table and his linked tables
             Filter on the language_COLUMN text attribute (ex: 'dum (Middle Dutch)')
@@ -275,79 +314,45 @@ class LostmaDB:
                                                                                             "country"]},
                   4: {"name_table": "Witness", "attributes": ["is_unobserved", "claim_freetext", "preferred_siglum",
                                                               "alternative_sigla", "status_witness", "status_notes",
-                                                              "is_excerpt"]},
-                  5: {"name_table": "Witness_regional_writing_style", "attributes": ["\"H-ID\"", "preferred_name",
-                                                                                     "language_COLUMN"]},
-                  6: {"name_table": "Witness", "attributes": ["scripta_freetext", "date_of_creation",
+                                                              "is_excerpt", "\"regional_writing_style H-ID\"",
+                                                              "scripta_freetext", "date_of_creation",
                                                               "date_of_creation_certainty", "date_of_creation_source",
-                                                              "date_freetext"]},
-                  7: {"name_table": "Witness_scribe", "attributes": ["\"H-ID\"", "given_names", "family_name",
-                                                                     "floruit", "date_of_birth", "date_of_death"]},
-                  8: {"name_table": "Witness", "attributes": ["number_of_hands", "scribe_note"]},
-                  9: {"name_table": "Witness_place_of_creation", "attributes": ["\"H-ID\"", "place_name",
-                                                                                "administrative_region", "country"]},
-                  10: {"name_table": "Witness", "attributes": ["place_of_creation_source"]},
-                  11: {"name_table": "TextTable", "attributes": ["\"H-ID\"", "preferred_name", "language_COLUMN",
+                                                              "date_freetext", "\"scribe H-ID\"", "number_of_hands",
+                                                              "scribe_note", "\"place_of_creation H-ID\"",
+                                                               "place_of_creation_source"]},
+                  5: {"name_table": "TextTable", "attributes": ["\"H-ID\"", "preferred_name", "language_COLUMN",
                                                                 "literary_form", "is_hypothetical", "claim_freetext",
                                                                 "length", "length_freetext", "verse_type", "rhyme_type",
-                                                                "stanza_type"]},
-                  12: {"name_table": "Text_is_derived_from", "attributes": ["\"H-ID\"", "preferred_name"]},
-                  13: {"name_table": "TextTable", "attributes": ["nature_of_derivations", "tradition_status",
-                                                                 "status_notes"]},
-                  14: {"name_table": "Stemma", "attributes": ["\"H-ID\"", "\"openstemmata id\""]},
-                  15: {"name_table": "Text_regional_writing_style", "attributes": ["\"H-ID\"", "preferred_name",
-                                                                                  "language_COLUMN"]},
-                  16: {"name_table": "TextTable", "attributes": ["scripta_freetext", "date_of_creation",
-                                                                 "date_of_creation_certainty",
-                                                                 "date_of_creation_source", "date_freetext"]},
-                  17: {"name_table": "Text_is_written_by", "attributes": ["\"H-ID\"", "given_names", "family_name",
-                                                                          "floruit", "date_of_birth", "date_of_death"]},
-                  18: {"name_table": "Text_is_adapted_by", "attributes": ["\"H-ID\"", "given_names", "family_name",
-                                                                          "floruit", "date_of_birth", "date_of_death"]},
-                  19: {"name_table": "TextTable", "attributes": ["author_freetext"]},
-                  20: {"name_table": "Text_place_of_creation", "attributes": ["\"H-ID\"", "place_name",
-                                                                              "administrative_region", "country"]},
-                  21: {"name_table": "TextTable", "attributes": ["place_of_creation_source"]},
-                  22: {"name_table": "Genre", "attributes": ["\"H-ID\"", "preferred_name"],
-                       "recursive": ["parent_genre H-ID"]},
-                  23: {"name_table": "Story", "attributes": ["\"H-ID\"", "preferred_name", "peripheral"]},
-                  24: {"name_table": "Storyverse", "attributes": ["\"H-ID\"", "preferred_name"],
-                       "recursive": ["member_of_cycle H-ID"]}}
-        joins = [{"type_join": "LEFT JOIN", "table": "Scripta Witness_regional_writing_style",
-                  "on": "ON Witness.\"regional_writing_style H-ID\" = Witness_regional_writing_style.\"H-ID\" "},
-                 {"type_join": "LEFT JOIN UNNEST(Witness.\"scribe H-ID\") AS ws(scribe_id) ON TRUE LEFT JOIN",
-                  "table": "Person Witness_scribe", "on": "ON Witness_scribe.\"H-ID\" = ws.scribe_id "},
-                 {"type_join": "LEFT JOIN", "table": "DocumentTable Witness_last_observed_in_doc",
+                                                                "stanza_type", "\"is_derived_from H-ID\"",
+                                                                 "nature_of_derivations", "tradition_status",
+                                                                 "status_notes", "\"in_stemma H-ID\"",
+                                                                 "\"regional_writing_style H-ID\"", "scripta_freetext",
+                                                                 "date_of_creation", "date_of_creation_certainty",
+                                                                 "date_of_creation_source", "date_freetext",
+                                                                 "\"is_written_by H-ID\"", "\"is_adapted_by H-ID\"",
+                                                                 "author_freetext", "\"place_of_creation H-ID\"",
+                                                                 "place_of_creation_source"]},
+                  6: {"name_table": "Genre", "attributes": ["\"H-ID\"", "preferred_name"],
+                      "recursive": ["parent_genre H-ID"]},
+                  7: {"name_table": "Story", "attributes": ["\"H-ID\"", "preferred_name",
+                                                            "\"is_part_of_storyverse H-ID\""]},
+                  #8: {"name_table": "Storyverse", "attributes": ["\"H-ID\"", "preferred_name"],
+                  #    "recursive": ["member_of_cycle H-ID"]}
+                  }
+        joins = [{"type_join": "LEFT JOIN", "table": "DocumentTable Witness_last_observed_in_doc",
                   "on": "ON Witness.\"last_observed_in_doc H-ID\" = Witness_last_observed_in_doc.\"H-ID\" "},
                  {"type_join": "LEFT JOIN", "table": "Place Witness_last_observed_in_doc_location",
                   "on": "ON Witness_last_observed_in_doc.\"location H-ID\" "
                         "= Witness_last_observed_in_doc_location.\"H-ID\" "},
-                 {"type_join": "LEFT JOIN UNNEST(Witness.\"place_of_creation H-ID\") AS p(place_id) ON TRUE LEFT JOIN",
-                  "table": "Place Witness_place_of_creation",
-                  "on": "ON Witness_place_of_creation.\"H-ID\" = p.place_id "},
                  {"type_join": "LEFT JOIN", "table": "TextTable",
                   "on": "ON Witness.\"is_manifestation_of H-ID\" = TextTable.\"H-ID\" "},
                  {"type_join": "LEFT JOIN", "table": "Genre",
                   "on": "ON TextTable.\"specific_genre H-ID\" = Genre.\"H-ID\" "},
                  {"type_join": "LEFT JOIN UNNEST(TextTable.\"is_expression_of H-ID\") AS s(story_id) ON TRUE LEFT JOIN",
                   "table": "Story", "on": "ON Story.\"H-ID\" = s.story_id "},
-                 {"type_join": "LEFT JOIN UNNEST(Story.\"is_part_of_storyverse H-ID\") AS sv(storyverse_id) "
-                               "ON TRUE LEFT JOIN",
-                  "table": "Storyverse", "on": "ON Storyverse.\"H-ID\" = sv.storyverse_id "},
-                 {"type_join": "LEFT JOIN", "table": "Scripta Text_regional_writing_style",
-                  "on": "ON TextTable.\"regional_writing_style H-ID\" = Text_regional_writing_style.\"H-ID\" "},
-                 {"type_join": "LEFT JOIN UNNEST(TextTable.\"is_written_by H-ID\") AS tw(author_id) ON TRUE LEFT JOIN",
-                  "table": "Person Text_is_written_by", "on": "ON Text_is_written_by.\"H-ID\" = tw.author_id "},
-                 {"type_join": "LEFT JOIN UNNEST(TextTable.\"is_adapted_by H-ID\") AS t(adaptator_id) ON TRUE "
-                               "LEFT JOIN",
-                  "table": "Person Text_is_adapted_by", "on": "ON Text_is_adapted_by.\"H-ID\" = t.adaptator_id "},
-                 {"type_join": "LEFT JOIN", "table": "Place Text_place_of_creation",
-                  "on": "ON TextTable.\"place_of_creation H-ID\" = Text_place_of_creation.\"H-ID\" "},
-                 {"type_join": "LEFT JOIN UNNEST(TextTable.\"in_stemma H-ID\") AS st(stemma_id) ON TRUE LEFT JOIN",
-                  "table": "Stemma", "on": "ON Stemma.\"H-ID\" = st.stemma_id "},
-                 {"type_join": "LEFT JOIN UNNEST(TextTable.\"is_derived_from H-ID\") AS tt(derived_id) ON TRUE "
-                               "LEFT JOIN",
-                  "table": "TextTable Text_is_derived_from", "on": "ON Text_is_derived_from.\"H-ID\" = tt.derived_id "}
+                 #{"type_join": "LEFT JOIN UNNEST(Story.\"is_part_of_storyverse H-ID\") AS sv(storyverse_id) "
+                 #              "ON TRUE LEFT JOIN",
+                  #"table": "Storyverse", "on": "ON Storyverse.\"H-ID\" = sv.storyverse_id "}
                  ]
         condition = ""
         if languages:
@@ -355,12 +360,31 @@ class LostmaDB:
                 languages = [languages]
             condition = f"WHERE TextTable.language_COLUMN IN ('{"', '".join(languages)}')"
         result = self.table("Witness", condition, joins, select)
+        to_solve = {"Place": {"attributes": ["\"H-ID\"", "place_name", "administrative_region", "country"],
+                              "name_joins": ["Witness_place_of_creation H-ID", "TextTable_place_of_creation H-ID"]},
+                    "Person": {"attributes": ["\"H-ID\"", "given_names", "family_name", "floruit", "date_of_birth",
+                                              "date_of_death"],
+                               "name_joins": ["Witness_scribe H-ID", "TextTable_is_written_by H-ID",
+                                              "TextTable_is_adapted_by H-ID"]},
+                    "Stemma": {"attributes": ["\"H-ID\"", "\"openstemmata id\""],
+                               "name_joins": ["TextTable_in_stemma H-ID"]},
+                    "Scripta": {"attributes": ["\"H-ID\"", "preferred_name", "language_COLUMN"],
+                                "name_joins": ["TextTable_regional_writing_style H-ID",
+                                               "Witness_regional_writing_style H-ID"]},
+                    "Storyverse": {"attributes": ["\"H-ID\"", "preferred_name"],
+                                   "name_joins": ["Story_is_part_of_storyverse H-ID"]}
+                    }
+        result = self._solving_references(result, to_solve)
+        # simplify some data
         for col in result.columns:
             if result[col].apply(lambda x: isinstance(x, dict)).any():
                 result[col] = result[col].apply(normalize_heurist_date)
-        return drop_too_empty_columns(result)
+        if drop_empty_columns:
+            result = too_empty_columns(result)
+        return result
 
-    def parts(self, languages: list | str = None):
+    def parts(self, languages: list | str = None,
+              drop_empty_columns: bool = True):
         """
         Return a selection of attributes of the part table and his linked tables
             Filter on the language_COLUMN text attribute (ex: 'dum (Middle Dutch)')
@@ -371,9 +395,7 @@ class LostmaDB:
                                                                     "collection_of_fragments", "old_shelfmark",
                                                                     "digitization_freetext"]},
                   3: {"name_table": "Digitization", "attributes": ["\"H-ID\"", "URI"]},
-                  4: {"name_table": "Repository", "attributes": ["\"H-ID\"", "preferred_name", "label_name", "VIAF"]},
-                  5: {"name_table": "Repository_city", "attributes": ["\"H-ID\"", "place_name",
-                                                                      "administrative_region", "country"]}}
+                  4: {"name_table": "Repository", "attributes": ["\"H-ID\"", "preferred_name", "label_name", "VIAF"]}}
         joins = [{"type_join": "LEFT JOIN", "table": "DocumentTable",
                   "on": "ON Part.\"is_inscribed_on H-ID\" = DocumentTable.\"H-ID\" "},
                  {"type_join": "LEFT JOIN", "table": "Repository",
@@ -388,19 +410,77 @@ class LostmaDB:
                                     "ORDER BY d.\"H-ID\" ASC"
                                     ") = 1 "
                                ") Digitization ",
-                  "on": "ON DocumentTable.\"H-ID\" = digitization.doc_id "},
-                 {"type_join": "LEFT JOIN", "table": "Place Repository_city",
-                  "on": "ON Repository.\"city H-ID\" = Repository_city.\"H-ID\" "}]
+                  "on": "ON DocumentTable.\"H-ID\" = digitization.doc_id "}]
         condition = ""
         if languages:
             if isinstance(languages, str):
                 languages = [languages]
             condition += f"WHERE TextTable.language_COLUMN IN ('{"', '".join(languages)}')"
         result = self.table("Part", condition, joins, select)
+        to_solve = {"Place": {"attributes": ["\"H-ID\"", "place_name", "administrative_region", "country"],
+                              "name_joins": ["Repository_city H-ID"]}}
+        result = self._solving_references(result, to_solve)
         for col in result.columns:
             if result[col].apply(lambda x: isinstance(x, dict)).any():
                 result[col] = result[col].apply(normalize_heurist_date)
-        return drop_too_empty_columns(result)
+        if drop_empty_columns:
+            result = too_empty_columns(result)
+        return result
+
+    def stories(self):
+        """
+        Return the content of the story table connected to the storyverse table
+        """
+        select = {1: {"name_table": "Story", "attributes": ["\"H-ID\"", "preferred_name"]},
+                  2: {"name_table": "Storyverse", "attributes": ["\"H-ID\"", "preferred_name"]},
+                  3: {"name_table": "Parent_Storyverse", "attributes": ["\"H-ID\"", "preferred_name"]}
+                  }
+        joins = [{"type_join": "LEFT JOIN UNNEST(Story.\"is_part_of_storyverse H-ID\") AS sv(storyverse_id) "
+                               "ON TRUE LEFT JOIN",
+                  "table": "Storyverse", "on": "ON Storyverse.\"H-ID\" = sv.storyverse_id "},
+                 {"type_join": "LEFT JOIN UNNEST(Storyverse.\"member_of_cycle H-ID\") AS c(cycle_id) "
+                               "ON TRUE LEFT JOIN",
+                  "table": "Storyverse Parent_Storyverse", "on": "ON Parent_Storyverse.\"H-ID\" = c.cycle_id "}]
+        condition = ""
+        result = self.table("Story", condition, joins, select)
+        return result
+
+    def overview(self, languages: list | str = None) -> pd.DataFrame:
+        """
+        Summury the fill rates of each columns in general output
+        """
+        witnesses = self.witnesses(drop_empty_columns=False, languages=languages)
+        parts = self.parts(drop_empty_columns=False, languages=languages)
+        if not languages:
+            languages = ["dum (Middle Dutch)", "enm (Middle English)", "non_WEST (West Old Norse)",
+                         "non_EAST (East Old Norse)", "fro_PRO (Franco-Occitan)", "frm (Middle French)",
+                         "frp (Franco-Provençal)", "pro (Occitan)", "fro (Old French)", "fro_ITA (Franco-Italian)",
+                         "fro_ENG (Anglo-Norman)", "lat (Latin)", "gmh (Middle High German)", "gml (Middle Low German)",
+                         "cat (Catalan)", "glg (Galician)", "glg_POR (Galician-Portugese)", "por (Portugese)",
+                         "spa (Spanish)", "ita (Italian)", "ghg (Early Modern Irish)", "mga (Middle Irish)",
+                         "oco (Old Cornish)", "wlm (Middle Welsh)"]
+        fill_rates = pd.DataFrame()
+        fill_rates["total"] = pd.concat([pd.Series({"nbr_witnesses": len(witnesses)}),
+                                         too_empty_columns(witnesses, drop=False),
+                                         too_empty_columns(parts, drop=False)])
+        witness_to_join = ((witnesses[["TextTable_language_COLUMN", "Witness_observed_on_pages H-ID"]]
+                           .explode("Witness_observed_on_pages H-ID"))
+                           .rename(columns={"Witness_observed_on_pages H-ID": "Part_H-ID"})
+                           .dropna(subset=["Part_H-ID"]))
+        parts = parts.merge(
+            witness_to_join,
+            on="Part_H-ID",
+            how="left"
+        )
+        for language in languages:
+            witnesses_filtred = witnesses[witnesses.TextTable_language_COLUMN == language]
+            if not witnesses_filtred.empty:
+                parts_filtred = parts[parts.TextTable_language_COLUMN == language]
+                parts_filtred = parts_filtred.drop(columns=["TextTable_language_COLUMN"])
+                fill_rates[language] = pd.concat([pd.Series({"nbr_witnesses": len(witnesses_filtred)}),
+                                                  too_empty_columns(witnesses_filtred, drop=False),
+                                                  too_empty_columns(parts_filtred, drop=False)])
+        return fill_rates
 
     def analyse(self, name_table: str = None,
                 language: str = None) -> dict | str:

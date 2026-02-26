@@ -2,7 +2,8 @@ from pathlib import Path
 import ast
 import csv
 import duckdb
-from pandas import DataFrame, NA
+from pandas import DataFrame, NA, notna
+import numpy as np
 
 KEYWORDS = [t[0] for t in duckdb.sql("select * from duckdb_keywords()").fetchall()]
 REQ_TYPES = ["optional", "recommended", "required", "hidden"]
@@ -10,6 +11,30 @@ REQ_TYPES = ["optional", "recommended", "required", "hidden"]
 """
 Here is a first version, ready for use, for a Heurist schema reader
 """
+
+still_usefull_columnns = ["Text_is_written_by_family_name", "Text_is_adapted_by_H-ID", "Text_is_adapted_by_given_names",
+                          "Text_is_adapted_by_family_name", "Text_is_adapted_by_floruit",
+                          "Text_is_adapted_by_date_of_birth", "Text_is_adapted_by_date_of_death",
+                          "Text_place_of_creation_H-ID", "Text_place_of_creation_place_name",
+                          "Text_place_of_creation_administrative_region", "Text_place_of_creation_country",
+                          "TextTable_place_of_creation_source"]
+
+def concat_attributes(df: DataFrame, id_col: str = "H-ID", out_col: str = "attributes", sep: str = ", ") -> DataFrame:
+    attrs = df.drop(columns=[id_col])
+
+    # Convertit tout en string, mais garde NA, puis filtre les vides
+    def join_row(row) -> str:
+        vals = [
+            str(v).strip()
+            for v in row
+            if notna(v) and str(v).strip() not in ("", "None", "nan", "<NA>")
+        ]
+        return sep.join(vals)
+
+    return DataFrame({
+        id_col: df[id_col],
+        out_col: attrs.apply(join_row, axis=1)
+    })
 
 
 def normalize_heurist_date(d):
@@ -33,23 +58,31 @@ def empty_lists_to_na(df: DataFrame) -> DataFrame:
     A function to change empty lists to NaN
     """
     def fix_cell(x):
-        return NA if isinstance(x, list) and len(x) == 0 else x
-    return df.applymap(fix_cell)
+        return NA if isinstance(x, np.ndarray) and x.size == 0 else x
+    return df.map(fix_cell)
 
 
-def drop_too_empty_columns(df: DataFrame, threshold: float = 0.10) -> DataFrame:
+def too_empty_columns(df: DataFrame, threshold: float = 0.05, drop: bool = True,
+                      to_keep_anyway: list = still_usefull_columnns) -> DataFrame:
     """
-    A function to drop too empty columns from a dataframe
+    A function to consider too empty columns from a DataFrame output
     """
-    df = DataFrame(df)
     df = empty_lists_to_na(df)
     non_null_frac = df.notna().mean()
-    dropped_cols = non_null_frac[non_null_frac < threshold].index.tolist()
-    kept_cols = non_null_frac[non_null_frac >= threshold].index.tolist()
-    print(f"Dropping {len(dropped_cols)} columns with < {int(threshold * 100)}% filled values:")
-    for c in dropped_cols:
-        print(f"  - {c} ({non_null_frac[c] * 100:.2f}%)")
-    return df[kept_cols]
+    if drop:
+        dropped_cols = non_null_frac[non_null_frac < threshold].index.tolist()
+        kept_cols = non_null_frac[non_null_frac >= threshold].index.tolist()
+        if to_keep_anyway:
+            for col in to_keep_anyway:
+                if col in df.index:
+                    dropped_cols.remove(col)
+                    kept_cols.append(col)
+        print(f"Dropping {len(dropped_cols)} columns with < {int(threshold * 100)}% filled values:")
+        for c in dropped_cols:
+            print(f"  - {c} ({non_null_frac[c] * 100:.2f}%)")
+        return df[kept_cols]
+    else:
+        return DataFrame(non_null_frac)
 
 
 def def_requirements(
