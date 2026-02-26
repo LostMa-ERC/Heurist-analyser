@@ -7,6 +7,7 @@ import numpy as np
 
 KEYWORDS = [t[0] for t in duckdb.sql("select * from duckdb_keywords()").fetchall()]
 REQ_TYPES = ["optional", "recommended", "required", "hidden"]
+DEFAULT_RECORD_GROUPS = ("My record types", "People and organisations", "Place, features")
 
 """
 Here is a first version, ready for use, for a Heurist schema reader

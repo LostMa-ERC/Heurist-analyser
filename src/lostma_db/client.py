@@ -4,15 +4,15 @@ from pathlib import Path
 
 from duckdb.experimental.spark import DataFrame
 
-from .general import def_requirements, normalize_heurist_date, too_empty_columns, concat_attributes
+from .general import (def_requirements, normalize_heurist_date,
+                      too_empty_columns, concat_attributes,
+                      DEFAULT_RECORD_GROUPS)
 from .lostma_tables import LOSTMA_TABLES
 from .tei_depot import TeiDepotClient
 from heurist.api.connection import HeuristAPIConnection
 from heurist.workflows.etl import extract_transform_load
 from heurist.schema import export_schema
-from heurist.utils.constants import DEFAULT_RECORD_GROUPS
 from numpy import ndarray
-
 
 class LostmaDB:
     def __init__(self, login, password, duckdb_path: str | Path | None = None):
