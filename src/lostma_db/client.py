@@ -335,9 +335,7 @@ class LostmaDB:
                   6: {"name_table": "Genre", "attributes": ["\"H-ID\"", "preferred_name"],
                       "recursive": ["parent_genre H-ID"]},
                   7: {"name_table": "Story", "attributes": ["\"H-ID\"", "preferred_name",
-                                                            "\"is_part_of_storyverse H-ID\""]},
-                  #8: {"name_table": "Storyverse", "attributes": ["\"H-ID\"", "preferred_name"],
-                  #    "recursive": ["member_of_cycle H-ID"]}
+                                                            "\"is_part_of_storyverse H-ID\""]}
                   }
         joins = [{"type_join": "LEFT JOIN", "table": "DocumentTable Witness_last_observed_in_doc",
                   "on": "ON Witness.\"last_observed_in_doc H-ID\" = Witness_last_observed_in_doc.\"H-ID\" "},
@@ -349,10 +347,7 @@ class LostmaDB:
                  {"type_join": "LEFT JOIN", "table": "Genre",
                   "on": "ON TextTable.\"specific_genre H-ID\" = Genre.\"H-ID\" "},
                  {"type_join": "LEFT JOIN UNNEST(TextTable.\"is_expression_of H-ID\") AS s(story_id) ON TRUE LEFT JOIN",
-                  "table": "Story", "on": "ON Story.\"H-ID\" = s.story_id "},
-                 #{"type_join": "LEFT JOIN UNNEST(Story.\"is_part_of_storyverse H-ID\") AS sv(storyverse_id) "
-                 #              "ON TRUE LEFT JOIN",
-                  #"table": "Storyverse", "on": "ON Storyverse.\"H-ID\" = sv.storyverse_id "}
+                  "table": "Story", "on": "ON Story.\"H-ID\" = s.story_id "}
                  ]
         condition = ""
         if languages:
