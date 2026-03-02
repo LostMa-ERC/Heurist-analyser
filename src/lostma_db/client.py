@@ -444,7 +444,7 @@ class LostmaDB:
         """
         select = {1: {"name_table": "Story", "attributes": ["\"H-ID\"", "preferred_name"]},
                   2: {"name_table": "Storyverse", "attributes": ["\"H-ID\"", "preferred_name"],
-                      "recursive": ["parent_genre H-ID"]}
+                      "recursive": ["member_of_cycle H-ID"]}
                   }
         joins = [{"type_join": "LEFT JOIN UNNEST(Story.\"is_part_of_storyverse H-ID\") AS sv(storyverse_id) "
                                "ON TRUE LEFT JOIN",
