@@ -100,6 +100,8 @@ class LostmaDB:
         Solving the multiple references with the name of the corresponding entity
         """
         for table in references:
+            normal_name = LOSTMA_TABLES[table]["normal_name"]
+            self._is_table_exists(normal_name, table)
             id_joined_table = table + "_H-ID"
             table_attributes = "attributes"
             solving_select = {1: {"name_table": table, "attributes": references[table]["attributes"]}}
@@ -441,15 +443,12 @@ class LostmaDB:
         Return the content of the story table connected to the storyverse table
         """
         select = {1: {"name_table": "Story", "attributes": ["\"H-ID\"", "preferred_name"]},
-                  2: {"name_table": "Storyverse", "attributes": ["\"H-ID\"", "preferred_name"]},
-                  3: {"name_table": "Parent_Storyverse", "attributes": ["\"H-ID\"", "preferred_name"]}
+                  2: {"name_table": "Storyverse", "attributes": ["\"H-ID\"", "preferred_name"],
+                      "recursive": ["parent_genre H-ID"]}
                   }
         joins = [{"type_join": "LEFT JOIN UNNEST(Story.\"is_part_of_storyverse H-ID\") AS sv(storyverse_id) "
                                "ON TRUE LEFT JOIN",
-                  "table": "Storyverse", "on": "ON Storyverse.\"H-ID\" = sv.storyverse_id "},
-                 {"type_join": "LEFT JOIN UNNEST(Storyverse.\"member_of_cycle H-ID\") AS c(cycle_id) "
-                               "ON TRUE LEFT JOIN",
-                  "table": "Storyverse Parent_Storyverse", "on": "ON Parent_Storyverse.\"H-ID\" = c.cycle_id "}]
+                  "table": "Storyverse", "on": "ON Storyverse.\"H-ID\" = sv.storyverse_id "}]
         condition = ""
         result = self.table("Story", condition, joins, select)
         return result
