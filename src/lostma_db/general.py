@@ -20,10 +20,14 @@ still_usefull_columnns = ["Text_is_written_by_family_name", "Text_is_adapted_by_
                           "Text_place_of_creation_administrative_region", "Text_place_of_creation_country",
                           "TextTable_place_of_creation_source"]
 
-def concat_attributes(df: DataFrame, id_col: str = "H-ID", out_col: str = "attributes", sep: str = ", ") -> DataFrame:
-    attrs = df.drop(columns=[id_col])
+def concat_attributes(df: DataFrame, out_col: str = "attributes", sep: str = ", ") -> DataFrame:
+    to_keep = []
+    for col in df.columns:
+        if "H-ID" in col:
+            to_keep.append(col)
+    out_df = df[to_keep]
+    df = df.drop(columns=to_keep)
 
-    # Convertit tout en string, mais garde NA, puis filtre les vides
     def join_row(row) -> str:
         vals = [
             str(v).strip()
@@ -32,10 +36,8 @@ def concat_attributes(df: DataFrame, id_col: str = "H-ID", out_col: str = "attri
         ]
         return sep.join(vals)
 
-    return DataFrame({
-        id_col: df[id_col],
-        out_col: attrs.apply(join_row, axis=1)
-    })
+    out_df[out_col] = df.apply(join_row, axis=1)
+    return out_df
 
 
 def normalize_heurist_date(d):

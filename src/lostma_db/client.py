@@ -95,40 +95,66 @@ class LostmaDB:
             print(f"Table {table_name} is not yet available. Downloading...")
             self.sync(type_table)
 
-    def _solving_references(self, data: DataFrame, references: dict) -> DataFrame:
+    def _solving_tables(self, data: DataFrame, references: dict) -> DataFrame:
         """
-        Solving the multiple references with the name of the corresponding entity
+        Organize the research of each reference in the corresponding tables
         """
         for table in references:
-            normal_name = LOSTMA_TABLES[table]["normal_name"]
-            self._is_table_exists(normal_name, table)
-            id_joined_table = table + "_H-ID"
-            table_attributes = "attributes"
-            solving_select = {1: {"name_table": table, "attributes": references[table]["attributes"]}}
-            solving = self.table(table, selects=solving_select)
+            if "depends_on" in references[table].keys():
+                solving = self._solving_references(data, table, references[table], only_search=True)
+                depends_on = references[table]["depends_on"]
+                for dependency in depends_on:
+                    solving = self._solving_references(solving, dependency, depends_on[dependency], keep_fks=True)
+                    solving = concat_attributes(solving, "attributes")
+                data = self._solving_references(data, table, references[table], only_solve=True, solving=solving)
+            else:
+                data = self._solving_references(data, table, references[table])
+        return data
+
+    def _solving_references(self, to_complete: DataFrame, name_table: str, complement: dict,
+                            only_search: bool = False, only_solve: bool = False,
+                            solving: DataFrame = None, keep_fks: bool = False) -> DataFrame:
+        """
+        Resolve an identifier field with the name of each entity
+        """
+        if not only_solve:
+            normal_name = LOSTMA_TABLES[name_table]["normal_name"]
+            self._is_table_exists(normal_name, name_table)
+            solving_select = {1: {"name_table": name_table, "attributes": complement["attributes"]}}
+            solving = self.table(name_table, selects=solving_select)
             for col in solving.columns:
                 if solving[col].apply(lambda x: isinstance(x, dict)).any():
                     solving[col] = solving[col].apply(normalize_heurist_date)
-            solving = concat_attributes(solving, id_joined_table, table_attributes)
-            for join in references[table]["name_joins"]:
-                name_table_attributes = join.replace("H-ID", "") + "Name"
-                solving = solving.rename(columns={solving.columns[-1]: name_table_attributes})
-                id_to_name = solving.set_index(id_joined_table)[name_table_attributes].to_dict()
+            solving = concat_attributes(solving, "attributes")
+            if only_search:
+                return solving
+        for join in complement["name_joins"]:
+            name_table_attributes = join.replace("H-ID", "") + "Name"
+            id_joined_table = name_table + "_H-ID"
+            solving = solving.rename(columns={solving.columns[-1]: name_table_attributes})
+            if keep_fks:
+                fks = solving.drop(columns=[id_joined_table, name_table_attributes]).columns
+                joined_fields = [name_table_attributes] + [fk for fk in fks]
+            else:
+                joined_fields = [name_table_attributes]
+            id_to_name = solving.set_index(id_joined_table)[joined_fields].to_dict()
+            table_name, attribute_name = join.split("_", 1)
+            is_list = self._is_list(table_name, attribute_name)
+            pos = to_complete.columns.get_loc(join) + 1
+            for supp in id_to_name:
 
                 def ids_to_names(x, multiple_value: bool):
                     if multiple_value:
                         if not isinstance(x, (list, ndarray)) or len(x) == 0:
                             return pd.NA
-                        return [id_to_name.get(hid) for hid in x]
+                        return [id_to_name[supp].get(hid) for hid in x]
                     else:
-                        return id_to_name.get(x)
+                        return id_to_name[supp].get(x)
 
-                table_name, attribute_name = join.split("_", 1)
-                is_list = self._is_list(table_name, attribute_name)
-                names_series = data[join].apply(ids_to_names, multiple_value=is_list)
-                pos = data.columns.get_loc(join) + 1
-                data.insert(pos, name_table_attributes, names_series)
-        return data
+                names_series = to_complete[join].apply(ids_to_names, multiple_value=is_list)
+                to_complete.insert(pos, supp, names_series)
+                pos += 1
+        return to_complete
 
     def sync(self, type_table: str = None) -> None:
         """
@@ -180,37 +206,66 @@ class LostmaDB:
             recursives, new_selects = [], []
             for t in selects:
                 name_table = selects[t]["name_table"]
-                if "recursive" in selects[t].keys():
-                    for recursive in selects[t]["recursive"]:
+                if "recursives" in selects[t].keys():
+                    for recursive in selects[t]["recursives"]:
                         walk = name_table + "_walk"
                         if self._is_list(name_table, recursive):
-                            start = f"""{walk} AS (
+                            recursive_query = f"""{walk} AS (
     SELECT
-        c."H-ID"          AS child_id,
-        u.parent_id       AS parent_id,
-        1                 AS depth,
-        [c."H-ID"]        AS path
+        c."H-ID"                    AS child_id,
+        u.parent_id                 AS parent_id,
+        [c."H-ID", u.parent_id]     AS path,
+        [u.parent_id] AS lineage_ids 
     FROM {name_table} c
     CROSS JOIN UNNEST(c."{recursive}") AS u(parent_id)
+    WHERE u.parent_id IS NOT NULL
 
     UNION ALL
 
     SELECT
         {walk}.child_id,
-        u2.parent_id                AS parent_id,
-        {walk}.depth + 1            AS depth,
-        {walk}.path || [p."H-ID"]   AS path
+        u2.parent_id                            AS parent_id,
+        {walk}.path || [u2.parent_id]           AS path,
+        {walk}.lineage_ids || [u2.parent_id]    AS lineage_ids
     FROM {walk}
     JOIN {name_table} p
     ON p."H-ID" = {walk}.parent_id
     CROSS JOIN UNNEST(p."{recursive}") AS u2(parent_id)
-    WHERE {walk}.parent_id IS NOT NULL
-    AND u2.parent_id IS NOT NULL
-    AND NOT list_contains({walk}.path, u2.parent_id)
+    WHERE u2.parent_id IS NOT NULL
+        AND NOT list_contains({walk}.path, u2.parent_id)
     ),
+    {name_table}_leaves AS (
+    SELECT {walk}.*
+    FROM {walk}
+    WHERE NOT EXISTS (
+        SELECT 1
+        FROM {name_table} p
+        CROSS JOIN UNNEST(p."{recursive}") AS u2(parent_id)
+        WHERE p."H-ID" = {walk}.parent_id
+            AND u2.parent_id IS NOT NULL
+            AND NOT list_contains({walk}.path, u2.parent_id)
+        )
+    ),
+    {name_table}_lineage_titles AS (
+    SELECT
+        {name_table}_leaves.child_id,
+        {name_table}_leaves.lineage_ids,
+        string_agg({name_table}.preferred_name, ' > ' ORDER BY a.ord) AS lineage_title
+    FROM {name_table}_leaves
+    CROSS JOIN UNNEST({name_table}_leaves.lineage_ids) WITH ORDINALITY AS a(ancestor_id, ord)
+    JOIN {name_table} ON {name_table}."H-ID" = a.ancestor_id
+    GROUP BY {name_table}_leaves.child_id, {name_table}_leaves.lineage_ids
+    ),
+    {name_table}_parents AS (
+    SELECT
+         child_id,
+         list(lineage_title) AS titles
+    FROM {name_table}_lineage_titles
+    GROUP BY child_id
+    )
     """
                         else:
-                            start = f"""{walk} AS (
+                            recursive_query = f"""{walk} AS (
     SELECT
         c."H-ID"          AS child_id,
         c."{recursive}"   AS parent_id,
@@ -231,8 +286,7 @@ class LostmaDB:
     WHERE {walk}.parent_id IS NOT NULL
          AND NOT list_contains({walk}.path, {walk}.parent_id)
     ),
-    """
-                        recursive_query = start + f"""{name_table}_ancestors AS (
+    {name_table}_ancestors AS (
     SELECT
         {walk}.child_id,
         {walk}.depth,
@@ -307,21 +361,16 @@ class LostmaDB:
         Return a selection of attributes of the witness table and his linked tables
             Filter on the language_COLUMN text attribute (ex: 'dum (Middle Dutch)')
         """
-        select = {1: {"name_table": "Witness", "attributes": ["\"H-ID\"", "\"observed_on_pages H-ID\""]},
-                  2: {"name_table": "Witness_last_observed_in_doc", "attributes": ["\"H-ID\"", "collection",
-                                                                                   "current_shelfmark",
-                                                                                   "invented_label"]},
-                  3: {"name_table": "Witness_last_observed_in_doc_location", "attributes": ["\"H-ID\"", "place_name",
-                                                                                            "administrative_region",
-                                                                                            "country"]},
-                  4: {"name_table": "Witness", "attributes": ["is_unobserved", "claim_freetext", "preferred_siglum",
-                                                              "alternative_sigla", "status_witness", "status_notes",
-                                                              "is_excerpt", "\"regional_writing_style H-ID\"",
-                                                              "scripta_freetext", "date_of_creation",
-                                                              "date_of_creation_certainty", "date_of_creation_source",
-                                                              "date_freetext", "\"scribe H-ID\"", "number_of_hands",
-                                                              "scribe_note", "\"place_of_creation H-ID\"",
-                                                               "place_of_creation_source"]},
+        select = {1: {"name_table": "Witness", "attributes": ["\"H-ID\"", "\"observed_on_pages H-ID\"",
+                                                              "\"last_observed_in_doc H-ID\"", "is_unobserved",
+                                                              "claim_freetext", "preferred_siglum", "alternative_sigla",
+                                                              "status_witness", "status_notes", "is_excerpt",
+                                                              "\"regional_writing_style H-ID\"", "scripta_freetext",
+                                                              "date_of_creation", "date_of_creation_certainty",
+                                                              "date_of_creation_source", "date_freetext",
+                                                              "\"scribe H-ID\"", "number_of_hands", "scribe_note",
+                                                              "\"place_of_creation H-ID\"", "place_of_creation_source"]
+                      },
                   5: {"name_table": "TextTable", "attributes": ["\"H-ID\"", "preferred_name", "language_COLUMN",
                                                                 "literary_form", "is_hypothetical", "claim_freetext",
                                                                 "length", "length_freetext", "verse_type", "rhyme_type",
@@ -335,16 +384,11 @@ class LostmaDB:
                                                                  "author_freetext", "\"place_of_creation H-ID\"",
                                                                  "place_of_creation_source"]},
                   6: {"name_table": "Genre", "attributes": ["\"H-ID\"", "preferred_name"],
-                      "recursive": ["parent_genre H-ID"]},
+                      "recursives": ["parent_genre H-ID"]},
                   7: {"name_table": "Story", "attributes": ["\"H-ID\"", "preferred_name",
                                                             "\"is_part_of_storyverse H-ID\""]}
                   }
-        joins = [{"type_join": "LEFT JOIN", "table": "DocumentTable Witness_last_observed_in_doc",
-                  "on": "ON Witness.\"last_observed_in_doc H-ID\" = Witness_last_observed_in_doc.\"H-ID\" "},
-                 {"type_join": "LEFT JOIN", "table": "Place Witness_last_observed_in_doc_location",
-                  "on": "ON Witness_last_observed_in_doc.\"location H-ID\" "
-                        "= Witness_last_observed_in_doc_location.\"H-ID\" "},
-                 {"type_join": "LEFT JOIN", "table": "TextTable",
+        joins = [{"type_join": "LEFT JOIN", "table": "TextTable",
                   "on": "ON Witness.\"is_manifestation_of H-ID\" = TextTable.\"H-ID\" "},
                  {"type_join": "LEFT JOIN", "table": "Genre",
                   "on": "ON TextTable.\"specific_genre H-ID\" = Genre.\"H-ID\" "},
@@ -369,9 +413,19 @@ class LostmaDB:
                                 "name_joins": ["TextTable_regional_writing_style H-ID",
                                                "Witness_regional_writing_style H-ID"]},
                     "Storyverse": {"attributes": ["\"H-ID\"", "preferred_name"],
-                                   "name_joins": ["Story_is_part_of_storyverse H-ID"]}
+                                   "name_joins": ["Story_is_part_of_storyverse H-ID"]},
+                    "DocumentTable": {"attributes": ["\"H-ID\"", "\"location H-ID\"", "collection", "current_shelfmark",
+                                                     "invented_label"],
+                                      "name_joins": ["Witness_last_observed_in_doc H-ID"],
+                                      "depends_on": {"Repository": {"attributes": ["\"H-ID\"", "label_name",
+                                                                                   "\"city H-ID\""],
+                                                                    "name_joins": ["DocumentTable_location H-ID"]},
+                                                     "Place": {"attributes": ["\"H-ID\"", "place_name"],
+                                                               "name_joins": ["Repository_city H-ID"]}
+                                                     }
+                                      }
                     }
-        result = self._solving_references(result, to_solve)
+        result = self._solving_tables(result, to_solve)
         # simplify some data
         for col in result.columns:
             if result[col].apply(lambda x: isinstance(x, dict)).any():
@@ -444,7 +498,7 @@ class LostmaDB:
         """
         select = {1: {"name_table": "Story", "attributes": ["\"H-ID\"", "preferred_name"]},
                   2: {"name_table": "Storyverse", "attributes": ["\"H-ID\"", "preferred_name"],
-                      "recursive": ["member_of_cycle H-ID"]}
+                      "recursives": ["member_of_cycle H-ID"]}
                   }
         joins = [{"type_join": "LEFT JOIN UNNEST(Story.\"is_part_of_storyverse H-ID\") AS sv(storyverse_id) "
                                "ON TRUE LEFT JOIN",
