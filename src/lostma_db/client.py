@@ -484,7 +484,7 @@ class LostmaDB:
         result = self.table("Part", condition, joins, select)
         to_solve = {"Place": {"attributes": ["\"H-ID\"", "place_name", "administrative_region", "country"],
                               "name_joins": ["Repository_city H-ID"]}}
-        result = self._solving_references(result, to_solve)
+        result = self._solving_tables(result, to_solve)
         for col in result.columns:
             if result[col].apply(lambda x: isinstance(x, dict)).any():
                 result[col] = result[col].apply(normalize_heurist_date)
