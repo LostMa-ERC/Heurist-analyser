@@ -10,7 +10,8 @@ readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
     "heurist-api (>=0.2.5,<0.3.0)",
-    "duckdb (>=1.4.1,<2.0.0)"
+    "duckdb (>=1.4.1,<2.0.0)",
+    "ipython (>=9.10.0,<9.11)"
 ]
 
 [dependency-groups]
