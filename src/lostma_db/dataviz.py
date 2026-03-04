@@ -2,6 +2,7 @@ import re
 import json
 from html import escape
 from IPython.display import HTML
+import uuid
 
 
 def dataviz_overview(
@@ -76,12 +77,13 @@ def dataviz_overview(
     new_tbody = tbody_open + "\n".join(new_rows) + tbody_close
     html = html[:m.start()] + new_tbody + html[m.end():]
     default_open_js = json.dumps(sorted(default_open))
+    uid = f"tg-{uuid.uuid4().hex}"
 
     script = f"""
     <script>
     (function() {{
       const DEFAULT_OPEN = {default_open_js};
-      const wrap = document.querySelector(".tg-wrap");
+      const wrap = document.getElementById("{uid}");
       if (!wrap) return;
 
       function setHeaderAndSummarySticky() {{
@@ -92,17 +94,14 @@ def dataviz_overview(
         if (!summaryRows.length) return;
 
         let offset = headerH;
-
         summaryRows.forEach((tr, i) => {{
           const cells = tr.querySelectorAll("th, td");
           const rowH = Math.ceil(tr.getBoundingClientRect().height) || 0;
-
           cells.forEach(cell => {{
             cell.style.top = offset + "px";
             cell.style.zIndex = 950 - i;
             cell.style.background = "#fafafa";
           }});
-
           offset += rowH;
         }});
       }}
@@ -110,7 +109,6 @@ def dataviz_overview(
       function setOpen(sectionId, open) {{
         const rows = wrap.querySelectorAll('tr[data-section="' + sectionId + '"]');
         rows.forEach(r => r.style.display = open ? "" : "none");
-
         const header = wrap.querySelector('tr.tg-section[data-tg-section="' + sectionId + '"]');
         if (header) header.dataset.open = open ? "true" : "false";
       }}
@@ -118,7 +116,6 @@ def dataviz_overview(
       function toggle(sectionId) {{
         const rows = wrap.querySelectorAll('tr[data-section="' + sectionId + '"]');
         if (!rows.length) return;
-
         const header = wrap.querySelector('tr.tg-section[data-tg-section="' + sectionId + '"]');
         const isOpen = header && header.dataset.open === "true";
         setOpen(sectionId, !isOpen);
@@ -127,8 +124,7 @@ def dataviz_overview(
       function applyInitialState() {{
         wrap.querySelectorAll('tr.tg-section[data-tg-section]').forEach(tr => {{
           const sid = tr.dataset.tgSection;
-          const shouldBeOpen = DEFAULT_OPEN.includes(sid);
-          setOpen(sid, shouldBeOpen);
+          setOpen(sid, DEFAULT_OPEN.includes(sid));
         }});
       }}
 
@@ -140,8 +136,8 @@ def dataviz_overview(
         }});
       }});
 
-      const openAll = document.getElementById("tg-open-all");
-      const closeAll = document.getElementById("tg-close-all");
+      const openAll = document.getElementById("{uid}-open-all");
+      const closeAll = document.getElementById("{uid}-close-all");
 
       if (openAll) openAll.addEventListener("click", () => {{
         wrap.querySelectorAll('tr.tg-section[data-tg-section]').forEach(tr => setOpen(tr.dataset.tgSection, true));
@@ -158,9 +154,7 @@ def dataviz_overview(
         setHeaderAndSummarySticky();
       }});
 
-      window.addEventListener("resize", () => {{
-        setHeaderAndSummarySticky();
-      }});
+      window.addEventListener("resize", setHeaderAndSummarySticky);
     }})();
     </script>
     """
@@ -240,10 +234,10 @@ def dataviz_overview(
   <h1>{escape(title)}</h1>
 
   <div style="margin: 8px 0 14px; display:flex; gap:8px; flex-wrap: wrap;">
-    <button id="tg-open-all">Open all</button>
-    <button id="tg-close-all">Close all</button>
+    <button id="{uid}-open-all">Open all</button>
+    <button id="{uid}-close-all">Close all</button>
   </div>
-<div class="tg-wrap">
+<div id="{uid}" class="tg-wrap">
   {html}
  </div>
   {script}
