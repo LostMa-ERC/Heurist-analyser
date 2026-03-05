@@ -205,6 +205,11 @@ def dataviz_overview(
       border-collapse: separate !important;
       border-spacing: 0;
     }
+    
+    .tg-wrap th,
+    .tg-wrap td{
+      padding: 6px 10px;
+    }
 
     .tg-wrap thead th{
       position: sticky;
@@ -212,6 +217,16 @@ def dataviz_overview(
       z-index: 1000;
       background: white;
       box-shadow: 0 1px 0 rgba(0,0,0,0.08);
+      white-space: normal;
+      line-height: 1.2;
+    }
+        
+    .tg-wrap tbody td{
+      min-width: 90px;
+    }
+    
+    .tg-wrap th.row_heading{
+      min-width: 220px;
     }
 
     tr[data-summary="true"] > th,
