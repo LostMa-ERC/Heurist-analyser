@@ -11,7 +11,9 @@ requires-python = ">=3.9"
 dependencies = [
     "heurist-api (>=0.2.5,<0.3.0)",
     "duckdb (>=1.4.1,<2.0.0)",
-    "ipython (>=9.10.0,<9.11)"
+    "ipython (<=7.34.0)",
+    "pandas>=2.0,<3",
+    "rich>=12.4.4,<14"
 ]
 
 [dependency-groups]
