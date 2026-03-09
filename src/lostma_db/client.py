@@ -495,7 +495,7 @@ class LostmaDB:
             result = too_empty_columns(result)
         return result
 
-    def stories(self):
+    def stories(self, languages: list | str = None):
         """
         Return the content of the story table connected to the storyverse table
         """
@@ -505,8 +505,23 @@ class LostmaDB:
                   ]
         joins = [{"type_join": "LEFT JOIN UNNEST(Story.\"is_part_of_storyverse H-ID\") AS sv(storyverse_id) "
                                "ON TRUE LEFT JOIN",
-                  "table": "Storyverse", "on": "ON Storyverse.\"H-ID\" = sv.storyverse_id "}]
+                  "table": "Storyverse", "on": "ON Storyverse.\"H-ID\" = sv.storyverse_id "},
+                 {"type_join": "LEFT JOIN ("
+                               "SELECT t.*, s.story_id "
+                               "FROM TextTable t "
+                               "CROSS JOIN UNNEST(t.\"is_expression_of H-ID\") AS s(story_id) "
+                               "QUALIFY row_number() OVER ("
+                               "PARTITION BY s.story_id  "
+                               "ORDER BY t.\"H-ID\" ASC"
+                               ") = 1 "
+                               ") TextTable ",
+                  "on": "ON TextTable.\"H-ID\" = TextTable.story_id "}
+                 ]
         condition = ""
+        if languages:
+            if isinstance(languages, str):
+                languages = [languages]
+            condition += f"WHERE TextTable.language_COLUMN IN ('{"', '".join(languages)}')"
         result = self.table("Story", condition, joins, select)
         return result
 
