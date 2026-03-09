@@ -465,25 +465,21 @@ class LostmaDB:
                                     "ORDER BY d.\"H-ID\" ASC"
                                     ") = 1 "
                                ") Digitization ",
-                  "on": "ON DocumentTable.\"H-ID\" = Digitization.doc_id "},
-                 {"type_join": "LEFT JOIN ("
-                               "SELECT w.*, p.part_id "
-                               "FROM Witness w "
-                               "CROSS JOIN UNNEST(w.\"observed_on_pages H-ID\") AS p(part_id) "
-                               "QUALIFY row_number() OVER ("
-                               "PARTITION BY p.part_id  "
-                               "ORDER BY w.\"H-ID\" ASC"
-                               ") = 1 "
-                               ") Witness ",
-                  "on": "ON Part.\"H-ID\" = Witness.part_id "},
-                 {"type_join": "LEFT JOIN", "table": "TextTable",
-                  "on": "ON Witness.\"is_manifestation_of H-ID\" = TextTable.\"H-ID\" "}
-                 ]
+                  "on": "ON DocumentTable.\"H-ID\" = Digitization.doc_id "}]
         condition = ""
         if languages:
             if isinstance(languages, str):
                 languages = [languages]
-            condition += f"WHERE TextTable.language_COLUMN IN ('{"', '".join(languages)}')"
+            condition += f"""
+                        WHERE EXISTS (
+                            SELECT 1
+                            FROM Witness
+                            CROSS JOIN UNNEST(Witness."observed_on_pages H-ID") AS p(part_id)
+                            JOIN TextTable ON Witness.\"is_manifestation_of H-ID\" = TextTable.\"H-ID\"
+                            WHERE p.part_id = Part.\"H-ID\"
+                              AND TextTable.language_COLUMN IN ('{"', '".join(languages)}')
+                        )
+                        """
         result = self.table("Part", condition, joins, select)
         to_solve = {"Place": {"attributes": ["\"H-ID\"", "place_name", "administrative_region", "country"],
                               "name_joins": ["Repository_city H-ID"]}}
@@ -505,23 +501,20 @@ class LostmaDB:
                   ]
         joins = [{"type_join": "LEFT JOIN UNNEST(Story.\"is_part_of_storyverse H-ID\") AS sv(storyverse_id) "
                                "ON TRUE LEFT JOIN",
-                  "table": "Storyverse", "on": "ON Storyverse.\"H-ID\" = sv.storyverse_id "},
-                 {"type_join": "LEFT JOIN ("
-                               "SELECT t.*, s.story_id "
-                               "FROM TextTable t "
-                               "CROSS JOIN UNNEST(t.\"is_expression_of H-ID\") AS s(story_id) "
-                               "QUALIFY row_number() OVER ("
-                               "PARTITION BY s.story_id  "
-                               "ORDER BY t.\"H-ID\" ASC"
-                               ") = 1 "
-                               ") TextTable ",
-                  "on": "ON Story.\"H-ID\" = TextTable.story_id "}
-                 ]
+                  "table": "Storyverse", "on": "ON Storyverse.\"H-ID\" = sv.storyverse_id "}]
         condition = ""
         if languages:
             if isinstance(languages, str):
                 languages = [languages]
-            condition += f"WHERE TextTable.language_COLUMN IN ('{"', '".join(languages)}')"
+            condition += f"""
+            WHERE EXISTS (
+                SELECT 1
+                FROM TextTable
+                CROSS JOIN UNNEST(TextTable."is_expression_of H-ID") AS s(story_id)
+                WHERE s.story_id = Story.\"H-ID\"
+                  AND TextTable.language_COLUMN IN ('{"', '".join(languages)}')
+            )
+            """
         result = self.table("Story", condition, joins, select)
         return result
 
