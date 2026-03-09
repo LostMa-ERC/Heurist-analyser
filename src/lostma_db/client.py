@@ -515,7 +515,7 @@ class LostmaDB:
                                "ORDER BY t.\"H-ID\" ASC"
                                ") = 1 "
                                ") TextTable ",
-                  "on": "ON TextTable.\"H-ID\" = TextTable.story_id "}
+                  "on": "ON Story.\"H-ID\" = TextTable.story_id "}
                  ]
         condition = ""
         if languages:
