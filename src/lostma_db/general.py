@@ -70,7 +70,7 @@ def too_empty_columns(df: DataFrame, threshold: float = 0.05, drop: bool = True,
         kept_cols = non_null_frac[non_null_frac >= threshold].index.tolist()
         if to_keep_anyway:
             for col in to_keep_anyway:
-                if col in df.index:
+                if col in dropped_cols:
                     dropped_cols.remove(col)
                     kept_cols.append(col)
         print(f"Dropping {len(dropped_cols)} columns with < {int(threshold * 100)}% filled values:")
