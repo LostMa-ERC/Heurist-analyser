@@ -13,13 +13,6 @@ DEFAULT_RECORD_GROUPS = ("My record types", "People and organisations", "Place, 
 Here is a first version, ready for use, for a Heurist schema reader
 """
 
-still_usefull_columnns = ["Text_is_written_by_family_name", "Text_is_adapted_by_H-ID", "Text_is_adapted_by_given_names",
-                          "Text_is_adapted_by_family_name", "Text_is_adapted_by_floruit",
-                          "Text_is_adapted_by_date_of_birth", "Text_is_adapted_by_date_of_death",
-                          "Text_place_of_creation_H-ID", "Text_place_of_creation_place_name",
-                          "Text_place_of_creation_administrative_region", "Text_place_of_creation_country",
-                          "TextTable_place_of_creation_source"]
-
 def concat_attributes(df: DataFrame, out_col: str = "attributes", sep: str = ", ") -> DataFrame:
     to_keep = []
     for col in df.columns:
@@ -66,7 +59,7 @@ def empty_lists_to_na(df: DataFrame) -> DataFrame:
 
 
 def too_empty_columns(df: DataFrame, threshold: float = 0.05, drop: bool = True,
-                      to_keep_anyway: list = still_usefull_columnns) -> DataFrame:
+                      to_keep_anyway: list = None) -> DataFrame:
     """
     A function to consider too empty columns from a DataFrame output
     """
