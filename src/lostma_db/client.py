@@ -360,6 +360,7 @@ class LostmaDB:
 
     def witnesses(self, languages: list | str = None,
                   columns_to_keep: list = None,
+                  completeness_threshold: float = None,
                   drop_empty_columns: bool = True):
         """
         Return a selection of attributes of the witness table and his linked tables
@@ -435,11 +436,17 @@ class LostmaDB:
             if result[col].apply(lambda x: isinstance(x, dict)).any():
                 result[col] = result[col].apply(normalize_heurist_date)
         if drop_empty_columns:
-            result = too_empty_columns(result, to_keep_anyway=columns_to_keep)
+            kwargs = {}
+            if columns_to_keep is not None:
+                kwargs["to_keep_anyway"] = columns_to_keep
+            if completeness_threshold is not None:
+                kwargs["threshold"] = completeness_threshold
+            result = too_empty_columns(result, **kwargs)
         return result
 
     def parts(self, languages: list | str = None,
               columns_to_keep: list = None,
+              completeness_threshold: float = None,
               drop_empty_columns: bool = True):
         """
         Return a selection of attributes of the part table and his linked tables
@@ -490,7 +497,12 @@ class LostmaDB:
             if result[col].apply(lambda x: isinstance(x, dict)).any():
                 result[col] = result[col].apply(normalize_heurist_date)
         if drop_empty_columns:
-            result = too_empty_columns(result, to_keep_anyway=columns_to_keep)
+            kwargs = {}
+            if columns_to_keep is not None:
+                kwargs["to_keep_anyway"] = columns_to_keep
+            if completeness_threshold is not None:
+                kwargs["threshold"] = completeness_threshold
+            result = too_empty_columns(result, **kwargs)
         return result
 
     def stories(self, languages: list | str = None):

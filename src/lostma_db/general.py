@@ -58,8 +58,8 @@ def empty_lists_to_na(df: DataFrame) -> DataFrame:
     return df.map(fix_cell)
 
 
-def too_empty_columns(df: DataFrame, threshold: float = 0.05, drop: bool = True,
-                      to_keep_anyway: list = None) -> DataFrame:
+def too_empty_columns(df: DataFrame, to_keep_anyway: list = None,
+                      threshold: float = 0.05, drop: bool = True) -> DataFrame:
     """
     A function to consider too empty columns from a DataFrame output
     """
