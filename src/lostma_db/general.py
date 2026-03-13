@@ -86,7 +86,7 @@ def def_requirements(
         req_types: list[str] | str = None
 ) -> dict:
     """
-    Organise the requirement level of each column from the schema of tables
+    Organize the requirement level of each column from the schema of tables
     """
     if req_types is None:
         req_types = REQ_TYPES

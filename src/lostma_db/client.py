@@ -6,7 +6,7 @@ from duckdb.experimental.spark import DataFrame
 
 from .general import (def_requirements, normalize_heurist_date,
                       too_empty_columns, concat_attributes,
-                      DEFAULT_RECORD_GROUPS)
+                      DEFAULT_RECORD_GROUPS, empty_lists_to_na)
 from .lostma_tables import LOSTMA_TABLES
 from .tei_depot import TeiDepotClient
 from heurist.api.connection import HeuristAPIConnection
@@ -181,9 +181,10 @@ class LostmaDB:
 
     def table(self,
               base_table: str,
-              condition: str = None ,
+              condition: str = None,
               joins: list[dict] = None,
-              selects: list[dict] = None):
+              selects: list[dict] = None,
+              language: str = None):
         """
         Return the content of a table
             Filter on a condition and add joins if there are any
@@ -344,7 +345,10 @@ class LostmaDB:
                 query += f"FROM {base_table} "
         if condition:
             query += condition
-        return self.sql(query)
+        kwargs = {}
+        if language:
+            kwargs["params"] = [language]
+        return self.sql(query, **kwargs)
 
     def texts(self, languages: list | str = None):
         """
@@ -534,10 +538,10 @@ class LostmaDB:
 
     def overview(self, languages: list | str = None) -> pd.DataFrame:
         """
-        Summury the fill rates of each columns in general output
+        Summary the fill rates of each column in general output
         """
-        witnesses = self.witnesses(drop_empty_columns=False, languages=languages)
-        parts = self.parts(drop_empty_columns=False, languages=languages)
+        witnesses = self.witnesses(languages=languages, drop_empty_columns=False)
+        parts = self.parts(languages=languages, drop_empty_columns=False)
         if not languages:
             languages = ["dum (Middle Dutch)", "enm (Middle English)", "non_WEST (West Old Norse)",
                          "non_EAST (East Old Norse)", "fro_PRO (Franco-Occitan)", "frm (Middle French)",
@@ -572,80 +576,38 @@ class LostmaDB:
     def analyse(self, name_table: str = None,
                 language: str = None) -> dict | str:
         """
-        A function to analyse the completeness of each table for each corpus
+        A function to analyze the completeness of each table for each corpus
         """
         if name_table[0].isupper():
             name_table = name_table[0].lower() + name_table[1:]
         sql_name = LOSTMA_TABLES[name_table]["safe_sql_name"]
         self._is_table_exists(name_table, sql_name)
-        rows = self.sql(
-            "SELECT column_name, data_type "
-            "FROM information_schema.columns "
-            "WHERE table_name = ?;",
-            [sql_name],
-            is_df=False,
-        ).fetchall()
-        col_types = {name: dtype for (name, dtype) in rows}
-        columns = list(col_types.keys())
-        requirements = self._get_requirements(sql_name)
-        action_required = "No field for this table"
-        if LOSTMA_TABLES[name_table]["is_corpus_data"]:
-            len_table = self.sql(LOSTMA_TABLES[name_table]["len_query"], [language], is_df=False).fetchone()[0]
-            if len_table and LOSTMA_TABLES[name_table]["action_required"]:
-                action_required = self.sql(LOSTMA_TABLES[name_table]["action_required"], [language],
-                                           is_df=False).fetchone()[0]
-        else:
-            len_table = self.sql(LOSTMA_TABLES["non-corpus tables"]["len_query"].format(table=sql_name),
-                                 is_df=False).fetchone()[0]
-            if len_table and LOSTMA_TABLES[name_table]["is_action_required"]:
-                action_required = self.sql(LOSTMA_TABLES["non-corpus tables"]["action_required"].format(table=sql_name),
-                                           is_df=False).fetchone()[0]
+        kwargs = {}
+        if language and "language_filter" in LOSTMA_TABLES[name_table].keys():
+            kwargs["condition"] = LOSTMA_TABLES[name_table]["language_filter"]
+            kwargs["language"] = language
+        result = self.table(sql_name, **kwargs)
+        len_table = len(result)
         if len_table:
-            agg_expr = []
-            col_metadata = []
-            for column in columns:
-                if column in ["H-ID", "type_id"] or "TRM-ID" in column:
-                    continue
-                req_type = requirements.get(column)
-                if req_type is None:
-                    continue
-                dtype = col_types[column]
-                if dtype.endswith('[]'):
-                    expr = f"""
-                    COUNT(*) FILTER (
-                      WHERE "{sql_name}"."{column}" IS NULL
-                         OR array_length("{sql_name}"."{column}") = 0
-                    ) AS "{column}"
-                    """
-                else:
-                    expr = f"""
-                    COUNT(*) FILTER (WHERE "{sql_name}"."{column}" IS NULL) AS "{column}"
-                    """
-                agg_expr.append(expr)
-                col_metadata.append((column, req_type))
-            agg_sql = ",\n".join(agg_expr)
-            if LOSTMA_TABLES[name_table]["is_corpus_data"]:
-                base_clause = LOSTMA_TABLES[name_table]["detail_query"].format(table=sql_name)
-                query = f"SELECT {agg_sql} {base_clause};"
-                params = [language]
-            else:
-                query = f"SELECT {agg_sql} FROM {sql_name};"
-                params = []
-            row = self.sql(query, params, is_df=False).fetchone()
-            list_empty = []
-            for (i, (column, req_type)) in enumerate(col_metadata):
-                count_empty = row[i]
-                list_empty.append({
-                    "field": column,
-                    "required statement": req_type,
-                    "empty records": count_empty,
-                    "percentage empty": round((count_empty / len_table) * 100, 2),
-                })
-            return {
-                "completeness table": pd.DataFrame(list_empty),
-                "total records": len_table,
-                "action required": action_required
-            }
+            action_required = "No data for this table"
+            if "review_status" in result.columns:
+                action_required = len(result[result["review_status"] == "Action required"])
+            requirements = self._get_requirements(sql_name)
+            keep_cols = result.columns.tolist()
+            for column in result.columns:
+                if column in ["H-ID", "type_id"] or "TRM-ID" in column or requirements.get(column) is None:
+                    keep_cols.remove(column)
+            result = result[keep_cols]
+            result = empty_lists_to_na(result)
+            result_analyse = pd.DataFrame({
+                "requirements statement": requirements,
+                "empty records": result.isna().sum(),
+                "percentage empty": result.isnull().mean()
+            })
+            summary = pd.DataFrame({
+                "value": [len_table, action_required]
+            }, index=["total", "action_required"])
+            return {"summary": summary, "data": result_analyse}
         else:
             return "No data"
 

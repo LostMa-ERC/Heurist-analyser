@@ -1,238 +1,181 @@
 LOSTMA_TABLES = {
     "text": {
         "safe_sql_name": "TextTable",
-        "is_corpus_data": True,
-        "len_query": "SELECT COUNT(*) FROM TextTable WHERE language_COLUMN = ?;",
-        "detail_query": "FROM TextTable WHERE language_COLUMN = ?;",
-        "action_required": "SELECT count(*) FROM TextTable "
-                           "WHERE review_status = 'Action required' AND language_COLUMN = ?;",
+        "language_filter": "WHERE language_COLUMN = ?;",
         "type": "My record types"
     },
     "witness": {
             "safe_sql_name": "Witness",
-            "is_corpus_data": True,
-            "len_query": "SELECT COUNT(*) FROM witness "
-                         "INNER JOIN TextTable ON TextTable.\"H-ID\" = witness.\"is_manifestation_of H-ID\" "
-                         "WHERE TextTable.language_COLUMN = ?;",
-            "detail_query": "FROM witness "
-                            "INNER JOIN TextTable ON TextTable.\"H-ID\" = witness.\"is_manifestation_of H-ID\" "
-                            "WHERE TextTable.language_COLUMN = ?;",
-            "action_required": "SELECT count(*) FROM witness "
-                               "INNER JOIN TextTable ON TextTable.\"H-ID\" = witness.\"is_manifestation_of H-ID\" "
-                               "WHERE witness.review_status = 'Action required' AND TextTable.language_COLUMN = ?;",
+            "language_filter": """WHERE EXISTS (
+                                    SELECT 1
+                                    FROM TextTable
+                                    WHERE TextTable.\"H-ID\" = Witness.\"is_manifestation_of H-ID\"
+                                      AND TextTable.language_COLUMN = ?
+                                );""",
             "type": "My record types"
         },
     "part": {
             "safe_sql_name": "Part",
-            "is_corpus_data": True,
-            "len_query": "SELECT COUNT(DISTINCT part.\"H-ID\") FROM part "
-                         "INNER JOIN witness ON True "
-                         "INNER JOIN UNNEST(witness.\"observed_on_pages H-ID\") AS w ON w.unnest = part.\"H-ID\" "
-                         "INNER JOIN TextTable ON TextTable.\"H-ID\" = witness.\"is_manifestation_of H-ID\" "
-                         "WHERE TextTable.language_COLUMN = ?;",
-            "detail_query": "FROM part "
-                            "INNER JOIN witness ON True "
-                            "INNER JOIN UNNEST(witness.\"observed_on_pages H-ID\") AS w ON w.unnest = part.\"H-ID\" "
-                            "INNER JOIN TextTable ON TextTable.\"H-ID\" = witness.\"is_manifestation_of H-ID\" "
-                            "WHERE TextTable.language_COLUMN = ?;",
-            "action_required": "SELECT count(DISTINCT part.\"H-ID\") FROM part "
-                               "INNER JOIN witness ON True "
-                               "INNER JOIN UNNEST(witness.\"observed_on_pages H-ID\") AS w ON w.unnest = part.\"H-ID\" "
-                               "INNER JOIN TextTable ON TextTable.\"H-ID\" = witness.\"is_manifestation_of H-ID\" "
-                               "WHERE part.review_status = 'Action required' AND TextTable.language_COLUMN = ?;",
+            "language_filter": """WHERE EXISTS (
+                                    SELECT 1
+                                    FROM Witness
+                                    CROSS JOIN UNNEST(Witness.\"observed_on_pages H-ID\") AS p(part_id)
+                                    JOIN TextTable ON Witness.\"is_manifestation_of H-ID\" = TextTable.\"H-ID\"
+                                    WHERE p.part_id = Part.\"H-ID\"
+                                      AND TextTable.language_COLUMN = ?
+                                )""",
             "type": "My record types"
         },
     "document": {
             "safe_sql_name": "DocumentTable",
-            "is_corpus_data": True,
-            "len_query": "SELECT COUNT(DISTINCT DocumentTable.\"H-ID\") FROM DocumentTable "
-                         "INNER JOIN part ON part.\"is_inscribed_on H-ID\" = DocumentTable.\"H-ID\" "
-                         "INNER JOIN witness ON True "
-                         "INNER JOIN UNNEST(witness.\"observed_on_pages H-ID\") AS w ON w.unnest = part.\"H-ID\" "
-                         "INNER JOIN TextTable ON TextTable.\"H-ID\" = witness.\"is_manifestation_of H-ID\" "
-                         "WHERE TextTable.language_COLUMN = ?;",
-            "detail_query": "FROM DocumentTable "
-                            "INNER JOIN part ON part.\"is_inscribed_on H-ID\" = DocumentTable.\"H-ID\" "
-                            "INNER JOIN witness ON True "
-                            "INNER JOIN UNNEST(witness.\"observed_on_pages H-ID\") AS w ON w.unnest = part.\"H-ID\" "
-                            "INNER JOIN TextTable ON TextTable.\"H-ID\" = witness.\"is_manifestation_of H-ID\" "
-                            "WHERE TextTable.language_COLUMN = ?;",
-            "action_required": "SELECT count(DISTINCT DocumentTable.\"H-ID\") FROM DocumentTable "
-                               "INNER JOIN part ON part.\"is_inscribed_on H-ID\" = DocumentTable.\"H-ID\" "
-                               "INNER JOIN witness ON True "
-                               "INNER JOIN UNNEST(witness.\"observed_on_pages H-ID\") AS w ON w.unnest = part.\"H-ID\" "
-                               "INNER JOIN TextTable ON TextTable.\"H-ID\" = witness.\"is_manifestation_of H-ID\" "
-                               "WHERE DocumentTable.review_status = 'Action required' "
-                               "AND TextTable.language_COLUMN = ?;",
+            "language_filter": """WHERE EXISTS (
+                                    SELECT 1
+                                    FROM Witness
+                                    CROSS JOIN UNNEST(Witness."observed_on_pages H-ID") AS p(part_id)
+                                    JOIN Part ON p.part_id = Part.\"H-ID\"
+                                    JOIN TextTable ON Witness.\"is_manifestation_of H-ID\" = TextTable.\"H-ID\"
+                                    WHERE Part.\"is_inscribed_on H-ID\" = DocumentTable.\"H-ID\"
+                                      AND TextTable.language_COLUMN = ?
+                                )""",
             "type": "My record types"
         },
     "digitization": {
             "safe_sql_name": "Digitization",
-            "is_corpus_data": True,
-            "len_query": "SELECT COUNT(DISTINCT digitization.\"H-ID\") FROM digitization "
-                         "INNER JOIN DocumentTable ON True "
-                         "INNER JOIN UNNEST(digitization.\"digitization_of H-ID\") "
-                         "AS d ON d.unnest = DocumentTable.\"H-ID\" "
-                         "INNER JOIN part ON part.\"is_inscribed_on H-ID\" = DocumentTable.\"H-ID\" "
-                         "INNER JOIN witness ON True "
-                         "INNER JOIN UNNEST(witness.\"observed_on_pages H-ID\") AS w ON w.unnest = part.\"H-ID\" "
-                         "INNER JOIN TextTable ON TextTable.\"H-ID\" = witness.\"is_manifestation_of H-ID\" "
-                         "WHERE TextTable.language_COLUMN = ?;",
-            "detail_query": "FROM digitization "
-                            "INNER JOIN DocumentTable ON True "
-                            "INNER JOIN UNNEST(digitization.\"digitization_of H-ID\") "
-                            "AS d ON d.unnest = DocumentTable.\"H-ID\" "
-                            "INNER JOIN part ON part.\"is_inscribed_on H-ID\" = DocumentTable.\"H-ID\" "
-                            "INNER JOIN witness ON True "
-                            "INNER JOIN UNNEST(witness.\"observed_on_pages H-ID\") AS w ON w.unnest = part.\"H-ID\" "
-                            "INNER JOIN TextTable ON TextTable.\"H-ID\" = witness.\"is_manifestation_of H-ID\" "
-                            "WHERE TextTable.language_COLUMN = ?;",
-            "action_required": None,
+            "language_filter": """WHERE EXISTS (
+                                                WITH witness_parts AS (
+                                                    SELECT Witness.\"is_manifestation_of H-ID\" AS text_id, obs.part_id           
+                                                    FROM Witness
+                                                    CROSS JOIN UNNEST(Witness.\"observed_on_pages H-ID\") 
+                                                        AS obs(part_id)
+                                                )
+                                                SELECT 1
+                                                FROM UNNEST(digitization.\"digitization_of H-ID\") AS d(document_id)
+                                                JOIN DocumentTable ON d.document_id = DocumentTable.\"H-ID\"
+                                                JOIN Part ON Part.\"is_inscribed_on H-ID\" = DocumentTable.\"H-ID\"
+                                                JOIN witness_parts ON witness_parts.part_id = Part.\"H-ID\"
+                                                JOIN TextTable ON witness_parts.text_id = TextTable.\"H-ID\"
+                                                WHERE TextTable.language_COLUMN = ?
+                                            )""",
             "type": "My record types"
         },
     "physDesc": {
             "safe_sql_name": "PhysDesc",
-            "is_corpus_data": True,
-            "len_query": "SELECT COUNT(DISTINCT physDesc.\"H-ID\") FROM physDesc "
-                         "INNER JOIN part ON part.\"physical_description H-ID\" = physDesc.\"H-ID\" "
-                         "INNER JOIN witness ON True "
-                         "INNER JOIN UNNEST(witness.\"observed_on_pages H-ID\") AS w ON w.unnest = part.\"H-ID\" "
-                         "INNER JOIN TextTable ON TextTable.\"H-ID\" = witness.\"is_manifestation_of H-ID\" "
-                         "WHERE TextTable.language_COLUMN = ?;",
-            "detail_query": "FROM PhysDesc "
-                            "INNER JOIN part ON part.\"physical_description H-ID\" = PhysDesc.\"H-ID\" "
-                            "INNER JOIN witness ON True "
-                            "INNER JOIN UNNEST(witness.\"observed_on_pages H-ID\") AS w ON w.unnest = part.\"H-ID\" "
-                            "INNER JOIN TextTable ON TextTable.\"H-ID\" = witness.\"is_manifestation_of H-ID\" "
-                            "WHERE TextTable.language_COLUMN = ?;",
-            "action_required": "SELECT count(DISTINCT PhysDesc.\"H-ID\") FROM PhysDesc "
-                               "INNER JOIN part ON part.\"physical_description H-ID\" = PhysDesc.\"H-ID\" "
-                               "INNER JOIN witness ON True "
-                               "INNER JOIN UNNEST(witness.\"observed_on_pages H-ID\") AS w ON w.unnest = part.\"H-ID\" "
-                               "INNER JOIN TextTable ON TextTable.\"H-ID\" = witness.\"is_manifestation_of H-ID\" "
-                               "WHERE PhysDesc.review_status = 'Action required' AND TextTable.language_COLUMN = ?;",
+            "language_filter": """WHERE EXISTS (
+                                                SELECT 1
+                                                FROM Witness
+                                                CROSS JOIN UNNEST(Witness."observed_on_pages H-ID") AS p(part_id)
+                                                JOIN Part ON p.part_id = Part.\"H-ID\"
+                                                JOIN TextTable 
+                                                ON Witness.\"is_manifestation_of H-ID\" = TextTable.\"H-ID\"
+                                                WHERE Part.\"physical_description H-ID\" = PhysDesc.\"H-ID\"
+                                                    AND TextTable.language_COLUMN = ?
+                                                )""",
             "type": "My record types"
         },
     "stemma": {
             "safe_sql_name": "Stemma",
-            "is_corpus_data": True,
-            "len_query": "SELECT count(DISTINCT stemma.\"H-ID\") FROM stemma "
-                         "INNER JOIN TextTable ON True "
-                         "INNER JOIN UNNEST(TextTable.\"in_stemma H-ID\") AS s ON s.unnest = stemma.\"H-ID\" "
-                         "WHERE TextTable.language_COLUMN = ?;",
-            "detail_query": "FROM stemma "
-                            "INNER JOIN TextTable ON True "
-                            "INNER JOIN UNNEST(TextTable.\"in_stemma H-ID\") AS s ON s.unnest = stemma.\"H-ID\" "
-                            "WHERE TextTable.language_COLUMN = ?;",
-            "action_required": None,
+            "language_filter": """WHERE EXISTS (
+                                                SELECT 1
+                                                FROM TextTable
+                                                CROSS JOIN UNNEST(TextTable.\"in_stemma H-ID\") AS s(stemma_id)
+                                                WHERE s.stemma_id = Stemma.\"H-ID\"
+                                                WHERE TextTable.language_COLUMN = ?
+                                                )""",
             "type": "My record types"
         },
     "scripta": {
             "safe_sql_name": "Scripta",
-            "is_corpus_data": True,
-            "len_query": "SELECT count(DISTINCT scripta.\"H-ID\") FROM scripta "
-                         "WHERE scripta.language_COLUMN = ?;",
-            "detail_query": "FROM scripta "
-                            "WHERE TextTable.language_COLUMN = ?;",
-            "action_required": "SELECT count(DISTINCT scripta.\"H-ID\") FROM scripta "
-                               "WHERE scripta.review_status = 'Action required' AND scripta.language_COLUMN = ?;",
+            "language_filter": "WHERE language_COLUMN = ?;",
             "type": "My record types"
-    },
-    "images": {
-        "safe_sql_name": "Images",
-        "is_corpus_data": False,
-        "is_action_required": False,
-        "type": "My record types"
     },
     "story": {
         "safe_sql_name": "Story",
-        "is_corpus_data": False,
-        "is_action_required": True,
+        "language_filter": """WHERE EXISTS (
+                                    SELECT 1
+                                    FROM TextTable
+                                    CROSS JOIN UNNEST(TextTable."is_expression_of H-ID") AS s(story_id)
+                                    WHERE s.story_id = Story.\"H-ID\"
+                                      AND TextTable.language_COLUMN = ?
+                                )""",
         "type": "My record types"
     },
     "storyverse": {
         "safe_sql_name": "Storyverse",
-        "is_corpus_data": False,
-        "is_action_required": True,
+        "language_filter": """WHERE EXISTS (
+                                            WITH text_story AS (
+                                                SELECT
+                                                    t."H-ID" AS text_id,
+                                                    rel_story.story_id
+                                                FROM TextTable t
+                                                CROSS JOIN UNNEST(TextTable.\"is_expression_of H-ID\") 
+                                                    AS rel_story(story_id)
+                                            )
+                                            FROM Story
+                                            CROSS JOIN UNNEST(Story."is_part_of_storyverse H-ID") AS sv(storyverse_id)
+                                            JOIN text_story
+                                             ON text_story.story_id = s."H-ID"
+                                            WHERE sv.storyverse_id = Storyverse.\"H-ID\"
+                                                AND TextTable.language_COLUMN = ?
+                                            )""",
         "type": "My record types"
     },
     "genre": {
         "safe_sql_name": "Genre",
-        "is_corpus_data": False,
-        "is_action_required": True,
+        "language_filter": """WHERE EXISTS (
+                                            SELECT 1
+                                            FROM TextTable
+                                            WHERE TextTable.\"specific_genre H-ID\" = Genre.\"H-ID\"
+                                              AND TextTable.language_COLUMN = ?
+                                        )""",
+        "type": "My record types"
+    },
+    "images": {
+        "safe_sql_name": "Images",
         "type": "My record types"
     },
     "repository": {
         "safe_sql_name": "Repository",
-        "is_corpus_data": False,
-        "is_action_required": False,
         "type": "My record types"
     },
     "footnote": {
         "safe_sql_name": "Footnote",
-        "is_corpus_data": False,
-        "is_action_required": False,
         "type": "My record types"
     },
     "person": {
         "safe_sql_name": "Person",
-        "is_corpus_data": False,
-        "is_action_required": False,
         "type": "People and organisations"
     },
     "organisation": {
         "safe_sql_name": "Organisation",
-        "is_corpus_data": False,
-        "is_action_required": False,
         "type": "People and organisations"
     },
     "place": {
         "safe_sql_name": "Place",
-        "is_corpus_data": False,
-        "is_action_required": False,
         "type": "Place, features"
     },
     "book": {
         "safe_sql_name": "Book",
-        "is_corpus_data": False,
-        "is_action_required": False,
         "type": "Bibliography"
     },
     "thesis": {
         "safe_sql_name": "Thesis",
-        "is_corpus_data": False,
-        "is_action_required": False,
         "type": "Bibliography"
     },
     "heurist journal volume": {
         "safe_sql_name": "HeuristJournalVolume",
-        "is_corpus_data": False,
-        "is_action_required": False,
         "type": "Bibliography"
     },
     "journal": {
         "safe_sql_name": "Journal",
-        "is_corpus_data": False,
-        "is_action_required": False,
         "type": "Bibliography"
     },
     "journal article": {
         "safe_sql_name": "JournalArticle",
-        "is_corpus_data": False,
-        "is_action_required": False,
         "type": "Bibliography"
     },
     "publication series": {
         "safe_sql_name": "PublicationSeries",
-        "is_corpus_data": False,
-        "is_action_required": False,
         "type": "Bibliography"
-    },
-    "non-corpus tables": {
-        "len_query": "SELECT count(DISTINCT {table}.\"H-ID\") FROM {table}",
-        "action_required": "SELECT count(DISTINCT {table}.\"H-ID\") FROM {table} "
-                           "WHERE {table}.review_status = 'Action required'"
-
     },
     "TextTable": {"normal_name": "text"},
     "Witness": {"normal_name": "witness"},
