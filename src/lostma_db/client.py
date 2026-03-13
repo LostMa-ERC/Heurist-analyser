@@ -609,7 +609,7 @@ class LostmaDB:
             }, index=["total", "action_required"])
             return {"summary": summary, "data": result_analyse}
         else:
-            return "No data"
+            return {"summary": "No data", "data": "No data"}
 
     def tradition(self, languages: list = None):
         """
