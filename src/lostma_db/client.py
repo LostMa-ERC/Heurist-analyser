@@ -602,7 +602,7 @@ class LostmaDB:
             result_analyse = pd.DataFrame({
                 "requirements statement": requirements,
                 "empty records": result.isna().sum(),
-                "percentage empty": round((result.isnull().mean() / len_table) * 100, 2)
+                "percentage empty": round(result.isnull().mean() * 100, 2)
             })
             summary = pd.DataFrame({
                 "value": [len_table, action_required]
