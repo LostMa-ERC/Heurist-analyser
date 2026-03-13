@@ -106,7 +106,7 @@ LOSTMA_TABLES = {
                                                 SELECT
                                                     t."H-ID" AS text_id,
                                                     rel_story.story_id
-                                                FROM TextTable t
+                                                FROM TextTable
                                                 CROSS JOIN UNNEST(TextTable.\"is_expression_of H-ID\") 
                                                     AS rel_story(story_id)
                                             )
