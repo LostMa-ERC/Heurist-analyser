@@ -196,8 +196,9 @@ class LostmaDB:
             select_expr = []
             for table in ordered_columns:
                 name = table["name_table"].split(" ")[-1]
+                name_alias = table["name_table"].split(" ")[0]
                 for att in table["attributes"]:
-                    a = f"{name}.{att} AS \"{name}_{att.replace("\"", "")}\""
+                    a = f"{name}.{att} AS \"{name_alias}_{att.replace("\"", "")}\""
                     select_expr.append(a)
             select_clause = ",\n    ".join(select_expr)
             select_query = f"SELECT\n    {select_clause}\nFROM {base_table} "
@@ -349,7 +350,6 @@ class LostmaDB:
         kwargs = {}
         if language:
             kwargs["params"] = [language]
-        print(query)
         return self.sql(query, **kwargs)
 
     def texts(self, languages: list | str = None):
@@ -557,15 +557,18 @@ class LostmaDB:
         result_story = self.table("Story", condition_story, joins_story, select_story)
         result_storyverse = self.table("Storyverse",
                                        condition_storyverse, joins_storyverse, select_storyverse)
-        result_story["Source type"] = "Story"
-        result_storyverse["Source type"] = "Storyverse"
-        result_story = result_story[["Source type", *[c for c in result_story.columns if c != "Source type"]]]
-        result_storyverse = result_storyverse[["Source type",
-                                               *[c for c in result_storyverse.columns if c != "Source type"]]]
-        result_story = result_story.rename(columns={"Story H-ID": "Source H-ID",
-                                                    "Story preferred_name": "Source preferred_name"})
-        result_storyverse = result_storyverse.rename(columns={"Storyverse H-ID": "Source H-ID",
-                                                              "Storyverse preferred_name": "Source preferred_name"})
+        result_story["Source_type"] = "Story"
+        result_storyverse["Source_type"] = "Storyverse"
+        result_story = result_story[["Source_type", *[c for c in result_story.columns if c != "Source_type"]]]
+        result_storyverse = result_storyverse[["Source_type",
+                                               *[c for c in result_storyverse.columns if c != "Source_type"]]]
+        result_story = result_story.rename(columns={"Story_H-ID": "Source_H-ID",
+                                                    "Story_preferred_name": "Source_preferred_name"})
+        result_storyverse = result_storyverse.rename(columns={"Storyverse_H-ID": "Source_H-ID",
+                                                              "Storyverse_preferred_name": "Source_preferred_name",
+                                                              "Storyverse_H-ID_1": "Storyverse_H-ID",
+                                                              "Storyverse_preferred_name_1": "Storyverse_preferred_name"
+                                                              })
         result = pd.concat([result_story, result_storyverse], ignore_index=True)
         return result
 
