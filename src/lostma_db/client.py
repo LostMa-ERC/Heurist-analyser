@@ -195,7 +195,7 @@ class LostmaDB:
             of attributes ordered by table"""
             select_expr = []
             for table in ordered_columns:
-                name = table["name_table"]
+                name = table["name_table"].split(" ")[-1]
                 for att in table["attributes"]:
                     a = f"{name}.{att} AS \"{name}_{att.replace("\"", "")}\""
                     select_expr.append(a)
@@ -203,10 +203,11 @@ class LostmaDB:
             select_query = f"SELECT\n    {select_clause}\nFROM {base_table} "
             return select_query
 
-        recursives = {}
+        recursives, select_table_names = {}, []
         if selects:
             for t in selects:
-                name_table = t["name_table"]
+                name_table = t["name_table"].split(" ")[0]
+                select_table_names.append(name_table)
                 if "recursives" in t.keys():
                     new_selects = []
                     for recursive in t["recursives"]:
@@ -324,8 +325,8 @@ class LostmaDB:
         if joins:
             join_tables = [j["table"] for j in joins if "table" in j.keys()]
             for join_table in join_tables:
-                if join_table not in recursives.keys():
-                    name_table = join_table.split(" ")[0]
+                name_table = join_table.split(" ")[0]
+                if name_table in select_table_names:
                     normal_name = LOSTMA_TABLES[name_table]["normal_name"]
                     self._is_table_exists(normal_name, name_table)
             if not selects:
@@ -348,6 +349,7 @@ class LostmaDB:
         kwargs = {}
         if language:
             kwargs["params"] = [language]
+        print(query)
         return self.sql(query, **kwargs)
 
     def texts(self, languages: list | str = None):
@@ -513,18 +515,21 @@ class LostmaDB:
         """
         Return the content of the story table connected to the storyverse table
         """
-        select = [{"name_table": "Story", "attributes": ["\"H-ID\"", "preferred_name"]},
-                  {"name_table": "Storyverse", "attributes": ["\"H-ID\"", "preferred_name"],
-                   "recursives": ["member_of_cycle H-ID"]}
-                  ]
-        joins = [{"type_join": "LEFT JOIN UNNEST(Story.\"is_part_of_storyverse H-ID\") AS sv(storyverse_id) "
+        select_story = [{"name_table": "Story", "attributes": ["\"H-ID\"", "preferred_name"]},
+                        {"name_table": "Storyverse", "attributes": ["\"H-ID\"", "preferred_name"]}]
+        select_storyverse = [{"name_table": "Storyverse", "attributes": ["\"H-ID\"", "preferred_name"]},
+                             {"name_table": "Storyverse sv2", "attributes": ["\"H-ID\"", "preferred_name"]}]
+        joins_story = [{"type_join": "LEFT JOIN UNNEST(Story.\"is_part_of_storyverse H-ID\") AS sv(storyverse_id) "
                                "ON TRUE LEFT JOIN",
-                  "table": "Storyverse", "on": "ON Storyverse.\"H-ID\" = sv.storyverse_id "}]
-        condition = ""
+                        "table": "Storyverse", "on": "ON Storyverse.\"H-ID\" = sv.storyverse_id "}]
+        joins_storyverse = [{"type_join": "LEFT JOIN UNNEST(Storyverse.\"member_of_cycle H-ID\") AS sv(storyverse_id) "
+                                     "ON TRUE LEFT JOIN",
+                             "table": "Storyverse sv2", "on": "ON sv2.\"H-ID\" = sv.storyverse_id "}]
+        condition_story, condition_storyverse = "", ""
         if languages:
             if isinstance(languages, str):
                 languages = [languages]
-            condition += f"""
+            condition_story += f"""
             WHERE EXISTS (
                 SELECT 1
                 FROM TextTable
@@ -533,7 +538,35 @@ class LostmaDB:
                   AND TextTable.language_COLUMN IN ('{"', '".join(languages)}')
             )
             """
-        result = self.table("Story", condition, joins, select)
+            condition_storyverse += f"""WHERE EXISTS (
+                                            FROM Story
+                                            CROSS JOIN UNNEST(Story."is_part_of_storyverse H-ID") AS sv(storyverse_id)
+                                            JOIN (
+                                                SELECT
+                                                    TextTable."H-ID" AS text_id,
+                                                    TextTable.language_COLUMN as language,
+                                                    rel_story.story_id
+                                                FROM TextTable
+                                                CROSS JOIN UNNEST(TextTable.\"is_expression_of H-ID\") 
+                                                    AS rel_story(story_id)                                            
+                                            ) text_story
+                                             ON text_story.story_id = Story."H-ID"
+                                            WHERE sv.storyverse_id = Storyverse.\"H-ID\"
+                                                AND language IN ('{"', '".join(languages)}')
+                                            )"""
+        result_story = self.table("Story", condition_story, joins_story, select_story)
+        result_storyverse = self.table("Storyverse",
+                                       condition_storyverse, joins_storyverse, select_storyverse)
+        result_story["Source type"] = "Story"
+        result_storyverse["Source type"] = "Storyverse"
+        result_story = result_story[["Source type", *[c for c in result_story.columns if c != "Source type"]]]
+        result_storyverse = result_storyverse[["Source type",
+                                               *[c for c in result_storyverse.columns if c != "Source type"]]]
+        result_story = result_story.rename(columns={"Story H-ID": "Source H-ID",
+                                                    "Story preferred_name": "Source preferred_name"})
+        result_storyverse = result_storyverse.rename(columns={"Storyverse H-ID": "Source H-ID",
+                                                              "Storyverse preferred_name": "Source preferred_name"})
+        result = pd.concat([result_story, result_storyverse], ignore_index=True)
         return result
 
     def overview(self, languages: list | str = None) -> pd.DataFrame:
