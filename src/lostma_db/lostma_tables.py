@@ -42,17 +42,18 @@ LOSTMA_TABLES = {
     "digitization": {
             "safe_sql_name": "Digitization",
             "language_filter": """WHERE EXISTS (
-                                                WITH witness_parts AS (
-                                                    SELECT Witness.\"is_manifestation_of H-ID\" AS text_id, obs.part_id           
-                                                    FROM Witness
-                                                    CROSS JOIN UNNEST(Witness.\"observed_on_pages H-ID\") 
-                                                        AS obs(part_id)
-                                                )
                                                 SELECT 1
-                                                FROM UNNEST(digitization.\"digitization_of H-ID\") AS d(document_id)
+                                                FROM UNNEST(Digitization.\"digitization_of H-ID\") AS d(document_id)
                                                 JOIN DocumentTable ON d.document_id = DocumentTable.\"H-ID\"
                                                 JOIN Part ON Part.\"is_inscribed_on H-ID\" = DocumentTable.\"H-ID\"
-                                                JOIN witness_parts ON witness_parts.part_id = Part.\"H-ID\"
+                                                JOIN (
+                                                    SELECT
+                                                        Witness."is_manifestation_of H-ID" AS text_id,
+                                                        obs.part_id
+                                                    FROM Witness
+                                                    CROSS JOIN UNNEST(Witness."observed_on_pages H-ID") AS obs(part_id)
+                                                ) witness_parts
+                                                  ON witness_parts.part_id = Part."H-ID"
                                                 JOIN TextTable ON witness_parts.text_id = TextTable.\"H-ID\"
                                                 WHERE TextTable.language_COLUMN = ?
                                             )""",
@@ -102,20 +103,20 @@ LOSTMA_TABLES = {
     "storyverse": {
         "safe_sql_name": "Storyverse",
         "language_filter": """WHERE EXISTS (
-                                            WITH text_story AS (
+                                            FROM Story
+                                            CROSS JOIN UNNEST(Story."is_part_of_storyverse H-ID") AS sv(storyverse_id)
+                                            JOIN (
                                                 SELECT
-                                                    t."H-ID" AS text_id,
+                                                    TextTable."H-ID" AS text_id,
+                                                    TextTable.language_COLUMN as language,
                                                     rel_story.story_id
                                                 FROM TextTable
                                                 CROSS JOIN UNNEST(TextTable.\"is_expression_of H-ID\") 
-                                                    AS rel_story(story_id)
-                                            )
-                                            FROM Story
-                                            CROSS JOIN UNNEST(Story."is_part_of_storyverse H-ID") AS sv(storyverse_id)
-                                            JOIN text_story
-                                             ON text_story.story_id = s."H-ID"
+                                                    AS rel_story(story_id)                                            
+                                            ) text_story
+                                             ON text_story.story_id = Story."H-ID"
                                             WHERE sv.storyverse_id = Storyverse.\"H-ID\"
-                                                AND TextTable.language_COLUMN = ?
+                                                AND language = ?
                                             )""",
         "type": "My record types"
     },
