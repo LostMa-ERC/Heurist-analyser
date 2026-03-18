@@ -327,7 +327,7 @@ class LostmaDB:
             join_tables = [j["table"] for j in joins if "table" in j.keys()]
             for join_table in join_tables:
                 name_table = join_table.split(" ")[0]
-                if name_table in select_table_names:
+                if name_table in select_table_names and name_table not in recursives.keys():
                     normal_name = LOSTMA_TABLES[name_table]["normal_name"]
                     self._is_table_exists(normal_name, name_table)
             if not selects:
