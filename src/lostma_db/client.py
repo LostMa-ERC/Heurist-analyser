@@ -361,8 +361,14 @@ class LostmaDB:
             if isinstance(languages, str):
                 languages = [languages]
             condition = f"WHERE language_COLUMN IN ('{"', '".join(languages)}')"
-            return self.table("TextTable", condition)
-        return self.table("TextTable")
+            result = self.table("TextTable", condition)
+        else:
+            result = self.table("TextTable")
+        # simplify some data
+        for col in result.columns:
+            if result[col].apply(lambda x: isinstance(x, dict)).any():
+                result[col] = result[col].apply(normalize_heurist_date)
+        return result
 
     def witnesses(self, languages: list | str = None,
                   columns_to_keep: list = None,
