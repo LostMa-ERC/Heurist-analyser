@@ -4,6 +4,7 @@ import csv
 import duckdb
 from pandas import DataFrame, NA, notna
 import numpy as np
+import re
 
 KEYWORDS = [t[0] for t in duckdb.sql("select * from duckdb_keywords()").fetchall()]
 REQ_TYPES = ["optional", "recommended", "required", "hidden"]
@@ -37,7 +38,7 @@ def normalize_heurist_date(d):
     if not isinstance(d, dict):
         return None
     if d.get("value") is not None:
-        return f"{d["value"].year}"
+        return f"{d['value'].year}"
     min_date = d.get("estMinDate")
     max_date = d.get("estMaxDate")
     if min_date and max_date:
@@ -47,6 +48,43 @@ def normalize_heurist_date(d):
     elif max_date:
         return f"before {max_date.year}"
     return None
+
+
+def parse_date_interval(d):
+    """
+    Converts a raw (dict) or normalized (str) Heurist date
+    into the interval [start, end].
+    """
+    if isinstance(d, dict):
+        if d.get("value") is not None:
+            year = d["value"].year if hasattr(d["value"], "year") else int(str(d["value"]).split("-", 1)[0])
+            return year, year
+        min_date = d.get("estMinDate")
+        max_date = d.get("estMaxDate")
+        start = min_date.year if hasattr(min_date, "year") else None
+        end = max_date.year if hasattr(max_date, "year") else None
+        return start, end
+
+    if isinstance(d, str):
+        d = d.strip()
+        # "1234"
+        if re.fullmatch(r"-?\d{1,4}", d):
+            year = int(d)
+            return year, year
+        # "1234 - 1250"
+        m = re.fullmatch(r"(-?\d{1,4})\s*-\s*(-?\d{1,4})", d)
+        if m:
+            return int(m.group(1)), int(m.group(2))
+        # "after 1234"
+        m = re.fullmatch(r"after\s+(-?\d{1,4})", d)
+        if m:
+            return int(m.group(1)), None
+        # "before 1250"
+        m = re.fullmatch(r"before\s+(-?\d{1,4})", d)
+        if m:
+            return None, int(m.group(1))
+
+    return None, None
 
 
 def empty_lists_to_na(df: DataFrame) -> DataFrame:

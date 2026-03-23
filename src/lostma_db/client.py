@@ -6,7 +6,8 @@ from duckdb.experimental.spark import DataFrame
 
 from .general import (def_requirements, normalize_heurist_date,
                       too_empty_columns, concat_attributes,
-                      DEFAULT_RECORD_GROUPS, empty_lists_to_na)
+                      DEFAULT_RECORD_GROUPS, empty_lists_to_na,
+                      parse_date_interval)
 from .lostma_tables import LOSTMA_TABLES
 from .tei_depot import TeiDepotClient
 from heurist.api.connection import HeuristAPIConnection
@@ -675,29 +676,10 @@ def filter_by_interval(table: pd.DataFrame, attribute: str, year_min: int, year_
     if isinstance(year_max, str):
         year_max = int(year_max)
 
-    def extract_interval(d):
-        if not isinstance(d, dict):
-            return pd.NaT, pd.NaT
-        if "value" in d and d["value"]:
-            return d["value"], d["value"]
-        start = d.get("estMinDate")
-        end = d.get("estMaxDate")
-        if not start and not end:
-            return pd.NaT, pd.NaT
-        return start, end
-
-    intervals = table[attribute].apply(extract_interval)
+    intervals = table[attribute].apply(parse_date_interval)
     intervals = pd.DataFrame(intervals.tolist(), index=table.index, columns=["start", "end"])
-    intervals["start"] = (
-        intervals["start"].astype(str)
-        .str.split("-", n=1).str[0]
-    )
-    intervals["start"] = pd.to_numeric(intervals["start"], errors="coerce")
-    intervals["end"] = (
-        intervals["end"].astype(str)
-        .str.split("-", n=1).str[0]
-    )
-    intervals["end"] = pd.to_numeric(intervals["end"], errors="coerce")
+    intervals["start"] = intervals["start"].fillna(float("-inf"))
+    intervals["end"] = intervals["end"].fillna(float("inf"))
     mask = (intervals["end"] >= year_min) & (intervals["start"] <= year_max)
     return table[mask]
 
@@ -705,16 +687,13 @@ def filter_by_interval(table: pd.DataFrame, attribute: str, year_min: int, year_
 def temporal_extent(table: pd.DataFrame, attribute: str) -> tuple[int | None, int | None]:
     mins, maxs = [], []
     for v in table[attribute]:
-        if not isinstance(v, dict):
-            continue
-        if "value" in v and v["value"]:
-            mins.append(v["value"].year)
-            maxs.append(v["value"].year)
-        else:
-            mins.append(v.get("estMinDate").year)
-            maxs.append(v.get("estMaxDate").year)
-    date_min = min(mins)
-    date_max = max(maxs)
+        start, end = parse_date_interval(v)
+        if start is not None:
+            mins.append(start)
+        if end is not None:
+            maxs.append(end)
+    date_min = min(mins) if mins else None
+    date_max = max(maxs) if maxs else None
     return date_min, date_max
 
 
