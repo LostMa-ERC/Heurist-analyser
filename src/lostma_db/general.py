@@ -38,15 +38,15 @@ def normalize_heurist_date(d):
     if not isinstance(d, dict):
         return None
     if d.get("value") is not None:
-        return f"{d['value'].year}"
+        return f"{d['value']["year"]}"
     min_date = d.get("estMinDate")
     max_date = d.get("estMaxDate")
     if min_date and max_date:
-        return f"{min_date.year} - {max_date.year}"
+        return f"{min_date["year"]} - {max_date["year"]}"
     elif min_date:
-        return f"after {min_date.year}"
+        return f"after {min_date["year"]}"
     elif max_date:
-        return f"before {max_date.year}"
+        return f"before {max_date["year"]}"
     return None
 
 
@@ -57,12 +57,12 @@ def parse_date_interval(d):
     """
     if isinstance(d, dict):
         if d.get("value") is not None:
-            year = d["value"].year if hasattr(d["value"], "year") else int(str(d["value"]).split("-", 1)[0])
+            year = d["value"]["year"] if "year" in d["value"].keys() else int(str(d["value"]).split("-", 1)[0])
             return year, year
         min_date = d.get("estMinDate")
         max_date = d.get("estMaxDate")
-        start = min_date.year if hasattr(min_date, "year") else None
-        end = max_date.year if hasattr(max_date, "year") else None
+        start = min_date["year"] if "year" in d["value"].keys() else None
+        end = max_date["year"] if "year" in d["value"].keys() else None
         return start, end
 
     if isinstance(d, str):
