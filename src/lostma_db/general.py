@@ -61,8 +61,8 @@ def parse_date_interval(d):
             return year, year
         min_date = d.get("estMinDate")
         max_date = d.get("estMaxDate")
-        start = min_date["year"] if "year" in d["value"].keys() else None
-        end = max_date["year"] if "year" in d["value"].keys() else None
+        start = min_date["year"] if isinstance(min_date, dict) else None
+        end = max_date["year"] if isinstance(max_date, dict) else None
         return start, end
 
     if isinstance(d, str):
