@@ -69,6 +69,7 @@ class LostmaDB:
         return [r[0] for r in rows]
 
     def _is_list(self, table: str, attribute: str) -> bool:
+        print(table, attribute)
         attribute_type = self.sql(
             """SELECT data_type
                FROM information_schema.columns
@@ -428,7 +429,7 @@ class LostmaDB:
                     "Stemma": {"attributes": ["\"H-ID\"", "\"openstemmata id\""],
                                "name_joins": ["TextTable_in_stemma H-ID"]},
                     "TextTable": {"attributes": ["\"H-ID\"", "preferred_name"],
-                                  "name_joins": ["is_derived_from H-ID"]},
+                                  "name_joins": ["TextTable_is_derived_from H-ID"]},
                     "Scripta": {"attributes": ["\"H-ID\"", "preferred_name", "language_COLUMN"],
                                 "name_joins": ["TextTable_regional_writing_style H-ID",
                                                "Witness_regional_writing_style H-ID"]},
