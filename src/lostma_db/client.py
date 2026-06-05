@@ -403,7 +403,7 @@ class LostmaDB:
                                                              "place_of_creation_source"]},
                   {"name_table": "Genre", "attributes": ["\"H-ID\"", "preferred_name"],
                             "recursives": ["parent_genre H-ID"]},
-                  {"name_table": "Story", "attributes": ["\"H-ID\"", "preferred_name",
+                  {"name_table": "Story", "attributes": ["\"H-ID\"", "preferred_name", "matter",
                                                          "\"is_part_of_storyverse H-ID\""]}
                   ]
         joins = [{"type_join": "LEFT JOIN", "table": "TextTable",
@@ -427,6 +427,8 @@ class LostmaDB:
                                               "TextTable_is_adapted_by H-ID"]},
                     "Stemma": {"attributes": ["\"H-ID\"", "\"openstemmata id\""],
                                "name_joins": ["TextTable_in_stemma H-ID"]},
+                    "TextTable": {"attributes": ["\"H-ID\"", "preferred_name"],
+                                  "name_joins": ["is_derived_from H-ID"]},
                     "Scripta": {"attributes": ["\"H-ID\"", "preferred_name", "language_COLUMN"],
                                 "name_joins": ["TextTable_regional_writing_style H-ID",
                                                "Witness_regional_writing_style H-ID"]},
